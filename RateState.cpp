@@ -1,5 +1,9 @@
 #include "RateState.h"
 
+ViCaRS::ViCaRS(unsigned int total_num_blocks) :_num_global_blocks(total_num_blocks), _num_equations(NEQ) {
+	_solver_long = _solver_rupture = _current_solver = NULL;
+}
+
 int ViCaRS::add_local_block(const BlockData &block_data) {
 	BlockGID		gid;
 	
@@ -19,7 +23,7 @@ int ViCaRS::add_local_block(const BlockData &block_data) {
 
 int ViCaRS::init(void) {
 	unsigned int	num_local, lid;
-	int				flag;
+	int				flag, rootdir[1];
 	realtype		*toldata;
 	GlobalLocalMap::const_iterator	it;
 	
@@ -45,9 +49,11 @@ int ViCaRS::init(void) {
 	
 	/* Call CVodeCreate to create the solver memory and specify the 
 	 * Backward Differentiation Formula and the use of a Newton iteration */
-	_solver = CVodeCreate(CV_BDF, CV_NEWTON);
-	if (_solver == NULL) return 1;
-	
+	_solver_long = CVodeCreate(CV_BDF, CV_NEWTON);
+	if (_solver_long == NULL) return 1;
+	_solver_rupture = CVodeCreate(CV_BDF, CV_NEWTON);
+	if (_solver_rupture == NULL) return 1;
+    
 	// Turn off error messages
 	//CVodeSetErrFile(_solver, NULL);
 	
@@ -55,30 +61,50 @@ int ViCaRS::init(void) {
 	// user's right hand side function in y'=f(t,y), the inital time, and
 	// the initial dependent variable vector.
 	_cur_time = 0;
-	flag = CVodeInit(_solver, func, _cur_time, _vars);
+	flag = CVodeInit(_solver_long, func, _cur_time, _vars);
+	if (flag != CV_SUCCESS) return 1;
+	flag = CVodeInit(_solver_rupture, func, _cur_time, _vars);
 	if (flag != CV_SUCCESS) return 1;
 	
 	// Call CVodeSVtolerances to specify the scalar relative tolerance
 	// and vector absolute tolerances
-	flag = CVodeSVtolerances(_solver, _rel_tol, _abs_tol);
+	flag = CVodeSVtolerances(_solver_long, _rel_tol, _abs_tol);
+	if (flag != CV_SUCCESS) return 1;
+	flag = CVodeSVtolerances(_solver_rupture, _rel_tol, _abs_tol);
 	if (flag != CV_SUCCESS) return 1;
 	
-	// Set the root finding function
-	//flag = CVodeRootInit(cvode, params.num_blocks(), vel_switch_finder);
-	//if (check_flag(&flag, "CVodeRootInit", 1)) return(1);
+	// Set the root finding function, going above the rupture limit for long term solver
+	// and going below the limit for rupture solver.
+	flag = CVodeRootInit(_solver_long, 1, rupture_test);
+	if (flag != CV_SUCCESS) return 1;
+	rootdir[0] = 1;
+	flag = CVodeSetRootDirection(_solver_long, rootdir);
+	if (flag != CV_SUCCESS) return 1;
+	
+	flag = CVodeRootInit(_solver_rupture, 1, rupture_test);
+	if (flag != CV_SUCCESS) return 1;
+	rootdir[0] = -1;
+	flag = CVodeSetRootDirection(_solver_rupture, rootdir);
+	if (flag != CV_SUCCESS) return 1;
 	
 	// Call CVSpbcg to specify the CVSPBCG scaled preconditioned Bi-CGSTab iterative solver
 	// Currently not using any preconditioner
-	flag = CVSpbcg(_solver, PREC_NONE, 0);
+	flag = CVSpbcg(_solver_long, PREC_NONE, 0);
+	if (flag != CV_SUCCESS) return 1;
+	flag = CVSpbcg(_solver_rupture, PREC_NONE, 0);
 	if (flag != CV_SUCCESS) return 1;
 	
 	// Set the user data
-	flag = CVodeSetUserData(_solver, this);
+	flag = CVodeSetUserData(_solver_long, this);
+	if (flag != CV_SUCCESS) return 1;
+	flag = CVodeSetUserData(_solver_rupture, this);
 	if (flag != CV_SUCCESS) return 1;
 	
 	// Set maximum number of steps per solver iteration
 	// This should be higher if the time step is less frequent or tolerance is lowered
-	flag = CVodeSetMaxNumSteps(_solver, 1000000);
+	flag = CVodeSetMaxNumSteps(_solver_long, 1000000);
+	if (flag != CV_SUCCESS) return 1;
+	flag = CVodeSetMaxNumSteps(_solver_rupture, 1000000);
 	if (flag != CV_SUCCESS) return 1;
 
 	// Set the Jacobian x vector function
@@ -88,34 +114,52 @@ int ViCaRS::init(void) {
 	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	
-	num_send = new int[world_size];
-	num_recv = new int[world_size];
-	send_offset = new int[world_size];
-	recv_offset = new int[world_size];
+    // Set the current solver to be the long term
+    _current_solver = _solver_long;
+    
+    _in_rupture = false;
 
 	return 0;
 }
 
-int ViCaRS::advance(realtype next_time) {
+int ViCaRS::advance(void) {
 	int				flag;
+	realtype		tstep;
+    
+	if (_in_rupture) tstep = _rupture_timestep;
+	else tstep = _long_timestep;
 	
-	flag = CVode(_solver, next_time, _vars, &_cur_time, CV_NORMAL);
-	if (flag == CV_SUCCESS) return 0;
-	else return flag;
+	flag = CVode(_current_solver, _cur_time+tstep, _vars, &_cur_time, CV_NORMAL);
+	if (flag == CV_SUCCESS) {
+		return 0;
+	} else if (flag == CV_ROOT_RETURN) {
+        // Update the stats for each solver
+        update_stats(_solver_long, _stats_long);
+        update_stats(_solver_rupture, _stats_rupture);
+        
+        // Change the current solver
+		if (_in_rupture) _current_solver = _solver_long;
+        else _current_solver = _solver_rupture;
+        
+        // Reinit both solvers
+        flag = CVodeReInit(_solver_long, _cur_time, _vars);
+        if (flag != CV_SUCCESS) return 1;
+        flag = CVodeReInit(_solver_rupture, _cur_time, _vars);
+        if (flag != CV_SUCCESS) return 1;
+         _in_rupture = !_in_rupture;
+		return 0;
+	} else return flag;
 }
 
 void ViCaRS::cleanup(void) {
-	delete num_send;
-	delete num_recv;
-	delete send_offset;
-	delete recv_offset;
-	
 	// Free y and abstol vectors
 	N_VDestroy_Parallel(_vars);
 	N_VDestroy_Parallel(_abs_tol);
 	
 	// Free integrator memory
-	CVodeFree(&_solver);
+	CVodeFree(&_solver_long);
+	// Free integrator memory
+	CVodeFree(&_solver_rupture);
 }
 
 realtype ViCaRS::interaction(BlockGID a, BlockGID b) {
@@ -149,24 +193,35 @@ void ViCaRS::write_cur_data(FILE *fp) {
 	fprintf(fp, "\n");
 }
 
-void ViCaRS::print_stats(void) {
-	long int nst, nfe, nni, ncfn, netf, njtv;
+void ViCaRS::update_stats(void *solver, SolverStats &stats) {
+	long int nst, nfe, nni, ncfn, netf, njtv, nge;
 	int flag;
 	
-	flag = CVodeGetNumSteps(_solver, &nst);
-	flag = CVodeGetNumRhsEvals(_solver, &nfe);
-	flag = CVodeGetNumErrTestFails(_solver, &netf);
-	flag = CVodeGetNumNonlinSolvIters(_solver, &nni);
-	flag = CVodeGetNumNonlinSolvConvFails(_solver, &ncfn);
-	flag = CVSpilsGetNumJtimesEvals(_solver, &njtv);
-	
-	printf("\nFinal Statistics:\n");
-	printf("NumSteps = %-6ld\n", nst);
-	printf("NumRhsEvals  = %-6ld\n", nfe);
-	printf("NumErrTestFails = %-6ld\n", netf);
-	printf("NumNonlinSolvIters = %-6ld\n", nni);
-	printf("NumNonlinSolvConvFails = %-6ld\n", ncfn);
-	printf("NumJtimesEvals = %-6ld\n", njtv);
+	flag = CVodeGetNumSteps(solver, &nst);
+	flag = CVodeGetNumRhsEvals(solver, &nfe);
+	flag = CVodeGetNumErrTestFails(solver, &netf);
+	flag = CVodeGetNumNonlinSolvIters(solver, &nni);
+	flag = CVodeGetNumNonlinSolvConvFails(solver, &ncfn);
+	flag = CVSpilsGetNumJtimesEvals(solver, &njtv);
+	flag = CVodeGetNumGEvals(solver, &nge);
+    
+    stats.add_counts(nst, nfe, nni, ncfn, netf, njtv, nge);
+}
+
+void ViCaRS::print_stats(void) {
+    // Kludgy design, move this to somewhere where it will only be called once even if print_stats is called repeatedly
+    // Otherwise we'll get double counts of operations
+    update_stats(_solver_rupture, _stats_rupture);
+    update_stats(_solver_long, _stats_long);
+    
+	printf("\nSolver Statistics\t\tLong Term\tRupture\n");
+	printf("NumSteps\t\t\t\t%-6ld\t\t%-6ld\n", _stats_long._nst, _stats_rupture._nst);
+	printf("NumRhsEvals\t\t\t\t%-6ld\t\t%-6ld\n", _stats_long._nfe, _stats_rupture._nfe);
+	printf("NumErrTestFails\t\t\t%-6ld\t\t%-6ld\n", _stats_long._netf, _stats_rupture._netf);
+	printf("NumNonlinSolvIters\t\t%-6ld\t\t%-6ld\n", _stats_long._nni, _stats_rupture._nni);
+	printf("NumNonlinSolvConvFails\t%-6ld\t\t%-6ld\n", _stats_long._ncfn, _stats_rupture._ncfn);
+	printf("NumJtimesEvals\t\t\t%-6ld\t\t%-6ld\n", _stats_long._njtv, _stats_rupture._njtv);
+	printf("NumRootFindEvals\t\t%-6ld\t\t%-6ld\n", _stats_long._nge, _stats_rupture._nge);
 }
 
 /*
@@ -230,6 +285,20 @@ int func(realtype t, N_Vector y, N_Vector ydot, void *user_data) {
 	}
 	
 	delete global_x;
+	
+	return 0;
+}
+
+// Function to determine when the simulation moves into rupture or long term mode
+// TODO: parallelize this function
+int rupture_test(realtype t, N_Vector y, realtype *gout, void *user_data) {
+	GlobalLocalMap::const_iterator	it;
+	ViCaRS			*sim = (ViCaRS*)(user_data);
+	double			local_max = -DBL_MAX;
+	
+	for (it=sim->begin();it!=sim->end();++it) local_max = fmax(local_max, Vth(y,it->second));
+	
+	gout[0] = local_max - sim->rupture_threshold();
 	
 	return 0;
 }

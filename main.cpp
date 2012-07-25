@@ -7,7 +7,6 @@ int main(int argc, char **argv)
 	ViCaRS			sim(NBLOCKS);
 	unsigned int	i;
 	double			param_a, param_b, param_k, param_r;
-	realtype		t=0, tstep=0.5;
 	FILE			*fp;
 	int				res;
 	
@@ -23,6 +22,12 @@ int main(int argc, char **argv)
 		sim.add_local_block(bdata);
 	}
 	
+	// Set the threshold for a rupture to be 0.1 m/s
+	sim.set_rupture_threshold(0.1);
+	
+	// Set the timesteps for each solver (in seconds)
+	sim.set_timesteps(1, 0.1);
+	
 	res = sim.init();
 	if (res) {
 		std::cerr << "Initializing error." << std::endl;
@@ -31,12 +36,10 @@ int main(int argc, char **argv)
 	
 	fp = fopen("out.txt", "w");
 	sim.write_header(fp);
-	t = tstep;
-	while(t <= 500) {
-		res = sim.advance(t);
-		if (res != 0) std::cerr << "Err " << res << " t: " << t << std::endl;
+	while(sim.get_time() <= 500) {
+		res = sim.advance();
+		if (res != 0) std::cerr << "Err " << res << " t: " << sim.get_time() << std::endl;
 		sim.write_cur_data(fp);
-		t += tstep;
 	}
 
 	fclose(fp);
