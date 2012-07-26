@@ -27,7 +27,7 @@ LogSpline::LogSpline(double _log_min, double _poly_pow, double _poly_c,
   while (vi < log_takeover) {
     v.push_back(vi);
     logv.push_back(log(vi));
-    pweight *= 1.005;
+    pweight *= 1.01;
     vi *= pweight;
   }
 
