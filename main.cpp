@@ -1,6 +1,6 @@
 #include "RateState.h"
 
-#define NBLOCKS			1
+#define NBLOCKS			3
 
 int main(int argc, char **argv)
 {
