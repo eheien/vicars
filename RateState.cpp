@@ -1,7 +1,7 @@
 #include "RateState.h"
 
 ViCaRS::ViCaRS(unsigned int total_num_blocks) :_num_global_blocks(total_num_blocks), 
- _num_equations(NEQ), log_approx(-40, 1.8, 1e16, 25, 100, 1e50) {
+ _num_equations(NEQ), log_approx(-40, 2, 1e12, 15, 100, 1e5) {
 	_solver_long = _solver_rupture = _current_solver = NULL;
 }
 
@@ -35,7 +35,7 @@ int ViCaRS::init(void) {
 	if (_abs_tol == NULL) return 1;
 	
 	// Initialize variables and tolerances
-	_rel_tol = RCONST(1.0e-8);
+	_rel_tol = RCONST(1.0e-10);
 	toldata = NV_DATA_P(_abs_tol);
 	for (it=_global_local_map.begin();it!=_global_local_map.end();++it) {
 		lid = it->second;
@@ -103,9 +103,9 @@ int ViCaRS::init(void) {
 	
 	// Set maximum number of steps per solver iteration
 	// This should be higher if the time step is less frequent or tolerance is lowered
-	flag = CVodeSetMaxNumSteps(_solver_long, 1000000);
+	flag = CVodeSetMaxNumSteps(_solver_long, 1e7);
 	if (flag != CV_SUCCESS) return 1;
-	flag = CVodeSetMaxNumSteps(_solver_rupture, 1000000);
+	flag = CVodeSetMaxNumSteps(_solver_rupture,1e7);
 	if (flag != CV_SUCCESS) return 1;
 
 	// Set the Jacobian x vector function
