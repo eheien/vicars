@@ -30,15 +30,15 @@ private:
 public:
 
   double operator ()(double v) { 
-    if (abs(v) < log_takeover/2) {
+  //  if (abs(v) < log_takeover/2) {
     return gsl_spline_eval(spline,v,acc); 
-    } else { return log(abs(v)); }
+  //  } else { return log(abs(v)); }
   };
 
   double deriv(double v) { 
-    if (abs(v) < log_takeover/2) {
+  //  if (abs(v) < log_takeover/2) {
     return gsl_spline_eval_deriv(spline,v,acc); 
-    } else { return abs(1/v); };
+  //  } else { return abs(1/v); };
   };
   LogSpline(double _log_min, double _poly_pow, double _poly_c,
       int _npoints_poly, int _npoints_log, double _log_takeover);

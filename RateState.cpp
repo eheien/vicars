@@ -1,7 +1,7 @@
 #include "RateState.h"
 
 ViCaRS::ViCaRS(unsigned int total_num_blocks) :_num_global_blocks(total_num_blocks), 
- _num_equations(NEQ), log_approx(-40, 1.8, 1e16, 25, 100, 1e10) {
+ _num_equations(NEQ), log_approx(-40, 1.8, 1e16, 25, 100, 1e50) {
 	_solver_long = _solver_rupture = _current_solver = NULL;
 }
 
