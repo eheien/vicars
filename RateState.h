@@ -100,7 +100,7 @@ private:
 	// When any block in the system reaches this speed, the system is considered to be in rupture mode
     realtype                _rupture_threshold;
     
-	LogSpline				log_hack;
+	  LogSpline	              log_approx;
     
     // Statistics on number of solver steps for long term and rupture solvers
     SolverStats             _stats_long, _stats_rupture, _stats_total;
@@ -145,7 +145,7 @@ public:
 	
 	realtype F(BlockGID block_num, realtype v, realtype h) {
 #ifdef USE_LOG_SPLINE
-		return 1 + param_a(block_num)*log_hack(v) + param_b(block_num)*log_hack(h);
+		return 1 + param_a(block_num) * log_approx(v) + param_b(block_num)*log_approx(h);
 #else
 		return 1 + param_a(block_num)*log(v) + param_b(block_num)*log(h);
 #endif

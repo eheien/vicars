@@ -1,6 +1,7 @@
 #include "RateState.h"
 
-ViCaRS::ViCaRS(unsigned int total_num_blocks) :_num_global_blocks(total_num_blocks), _num_equations(NEQ) {
+ViCaRS::ViCaRS(unsigned int total_num_blocks) :_num_global_blocks(total_num_blocks), 
+ _num_equations(NEQ), log_approx(-40, 2.5, 1e13, 15, 100, 1e12) {
 	_solver_long = _solver_rupture = _current_solver = NULL;
 }
 
@@ -243,13 +244,15 @@ int func(realtype t, N_Vector y, N_Vector ydot, void *user_data) {
 	
 	// Check if any velocity or theta values are below 0
 	local_fail = 0;
-	for (it=sim->begin();it!=sim->end();++it) {
+#ifndef USE_LOG_SPLINE
+  for (it=sim->begin();it!=sim->end();++it) {
 		if (Vth(y,it->second) <= 0 || Hth(y,it->second) <= 0) {
 			local_fail = 1;
 			break;
 		}
-	}
-	
+  }
+#endif
+
 	// Communicate with other processes to indicate whether or not to continue
 	// TODO: error check
 	MPI_Allreduce(&local_fail, &global_fail, 1, MPI_INT, MPI_LOR, MPI_COMM_WORLD);
