@@ -1,2 +1,8 @@
 .DS_Store
 out.txt
+build_vicars.sh
+run_vicars.sh
+vicars
+log_approx.txt
+log_sample_points.txt
+plot.p
