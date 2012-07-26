@@ -8,7 +8,6 @@
 
 #define TOL 1e-15
 #define MAXITER 1000
-asdf
 
 //#define DEBUG
 #define OUTPUT
