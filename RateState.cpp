@@ -1,7 +1,7 @@
 #include "RateState.h"
 
 ViCaRS::ViCaRS(unsigned int total_num_blocks) :_num_global_blocks(total_num_blocks), 
- _num_equations(NEQ), log_approx(-40, 2.5, 1e13, 15, 100, 1e12) {
+ _num_equations(NEQ), log_approx(-40, 3, 1e13, 20, 100, 1e12) {
 	_solver_long = _solver_rupture = _current_solver = NULL;
 }
 
@@ -109,7 +109,9 @@ int ViCaRS::init(void) {
 	if (flag != CV_SUCCESS) return 1;
 
 	// Set the Jacobian x vector function
-	//flag = CVSpilsSetJacTimesVecFn(_solver, jacobian_times_vector);
+	flag = CVSpilsSetJacTimesVecFn(_solver_long, jacobian_times_vector);
+	if (flag != CV_SUCCESS) return 1;
+	flag = CVSpilsSetJacTimesVecFn(_solver_rupture, jacobian_times_vector);
 	if (flag != CV_SUCCESS) return 1;
 	
 	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
@@ -305,7 +307,6 @@ int rupture_test(realtype t, N_Vector y, realtype *gout, void *user_data) {
 	
 	return 0;
 }
-
 // Computes Jv = Jacobian times v in order to improve convergence for Krylov subspace solver
 int jacobian_times_vector(N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, void *user_data, N_Vector tmp) {
 	ViCaRS			*sim = (ViCaRS*)(user_data);
@@ -317,14 +318,25 @@ int jacobian_times_vector(N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vec
 		lid = it->second;
 		Xth(Jv,lid) =	1 * Vth(v,lid);
 		Vth(Jv,lid) =	(-RCONST(1)/sim->param_r(gid)) * Xth(v,lid)
+#ifdef USE_LOG_SPLINE
+						+ -(sim->param_k(gid)*sim->param_a(gid)*sim->log_approx.deriv((Vth(y,lid)))/(sim->param_r(gid))) * Vth(v,lid)
+#else
 						+ -(sim->param_k(gid)*sim->param_a(gid)/(sim->param_r(gid)*Vth(y,lid))) * Vth(v,lid)
+#endif
 						+ -(sim->param_k(gid)*sim->param_b(gid)/(sim->param_r(gid)*Hth(y,lid))) * Hth(v,lid);
 #ifdef SLOWNESS_LAW
 		Hth(Jv,lid) =	-Hth(y,lid) * Vth(v,lid)
 						+ -Vth(y,lid) * Hth(v,lid);
 #else
+  #ifdef USE_LOG_SPLINE
+    Hth(Jv,lid) = -Hth(y,lid)*(sim->log_approx(Hth(y,lid)*Vth(y,lid)) 
+                    + Hth(y,lid)*Vth(y,lid) * sim->log_approx.deriv(Hth(y,lid)*Vth(y,lid))) * Vth(v,lid)
+                  - Vth(y,lid)*(sim->log_approx(Hth(y,lid)*Vth(y,lid)) 
+                    + Hth(y,lid)*Vth(y,lid)*sim->log_approx.deriv(Hth(y,lid)*Vth(y,lid))) * Hth(v,lid);
+  #else
 		Hth(Jv,lid) =	-Hth(y,lid)*(log(Hth(y,lid)*Vth(y,lid)) + 1) * Vth(v,lid)
 						+ -Vth(y,lid)*(log(Vth(y,lid)*Hth(y,lid)) + 1) * Hth(v,lid);
+  #endif
 #endif
 		//std::cerr << lid << " " << gid << " " << Xth(Jv,lid) << " " << Vth(Jv,lid) << " " << Hth(Jv,lid) << std::endl;
 	}
