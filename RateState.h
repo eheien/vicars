@@ -100,8 +100,6 @@ private:
 	// When any block in the system reaches this speed, the system is considered to be in rupture mode
     realtype                _rupture_threshold;
     
-	  LogSpline	              log_approx;
-    
     // Statistics on number of solver steps for long term and rupture solvers
     SolverStats             _stats_long, _stats_rupture, _stats_total;
     
@@ -112,6 +110,8 @@ public:
 	ViCaRS(unsigned int total_num_blocks);
 	~ViCaRS(void) {};
 	
+	LogSpline	              log_approx;
+
 	const_iterator begin(void) const { return _global_local_map.begin(); };
 	iterator begin(void) { return _global_local_map.begin(); };
 	const_iterator end(void) const { return _global_local_map.end(); };

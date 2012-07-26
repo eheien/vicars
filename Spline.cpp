@@ -50,7 +50,7 @@ LogSpline::LogSpline(double _log_min, double _poly_pow, double _poly_c,
   double* logv_arr = &logv[0];
 
   acc = gsl_interp_accel_alloc ();
-  spline = gsl_spline_alloc (gsl_interp_cspline, num_points);
+  spline = gsl_spline_alloc (gsl_interp_akima, num_points);
   gsl_spline_init (spline, v_arr, logv_arr, num_points);
 
 #ifdef OUTPUT
