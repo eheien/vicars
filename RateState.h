@@ -101,7 +101,7 @@ private:
     realtype                _rupture_threshold;
     
     // Statistics on number of solver steps for long term and rupture solvers
-    SolverStats             _stats_long, _stats_rupture, _stats_total;
+    SolverStats             _stats_long, _stats_rupture;
     
 public:
 	typedef GlobalLocalMap::iterator iterator;

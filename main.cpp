@@ -1,6 +1,6 @@
 #include "RateState.h"
 
-#define NBLOCKS			4
+#define NBLOCKS			2
 
 int main(int argc, char **argv)
 {
@@ -10,15 +10,39 @@ int main(int argc, char **argv)
 	FILE			*fp;
 	int				res;
 	
+	realtype		x_0, v_0, h_0, x_err, v_err, h_err;
+	double			side, A, G, v_p, mu_0, m, k, tau, g, L, rho, a, b;
+	
 	MPI_Init(&argc, &argv);
 	
+	side = 10*1000;					// meters
+	//side = 1;					// meters
+	A = pow(side, 2);				// meters^2, aka 10km^2
+	G = 3.0e10;						// Pascals
+	v_p = 5.0/(100*365.25*86400);	// meters/sec, aka 5 cm/year
+	mu_0 = 0.05;					// sliding coefficient of friction
+	rho = 2.5e3;					// kg/m^3
+	m = rho*pow(side, 3);			// kg
+	k = G*sqrt(A)/2;				// spring constant, N/m
+	tau = 2*M_PI*sqrt(m/k);			// natural period of vibration
+	g = 9.8;						// meters/sec^2
+	L = 1;							// meters
+	a = 0.003125;
+	b = 0.00625;
+	
+	param_a = a/mu_0;
+	param_b = b/mu_0;
+	param_k = m*g*mu_0/(k*v_p);
+	param_r = pow(tau*v_p/(2*M_PI*L), 2);
+    
 	param_a = 0.0625;
 	param_b = 0.125;
 	param_k = 20;
-	param_r = 1e-5;
+	param_r = 1e-6;
 	
 	for (i=0;i<NBLOCKS;++i) {
-		BlockData	bdata(i, param_a, param_b, param_k, param_r, -14.0+i, 1, 1, 1e-9, 1e-9, 1e-9);
+        x_err = v_err = h_err = 0;//RCONST(1e-6);
+		BlockData	bdata(i, param_a, param_b, param_k, param_r, -14.0+i, 1, 1, x_err, v_err, h_err);
 		sim.add_local_block(bdata);
 	}
 	
