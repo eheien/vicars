@@ -1,6 +1,6 @@
 #include "RateState.h"
 
-#define NBLOCKS			1
+#define NBLOCKS			4
 
 int main(int argc, char **argv)
 {
@@ -18,7 +18,7 @@ int main(int argc, char **argv)
 	param_r = 1e-5;
 	
 	for (i=0;i<NBLOCKS;++i) {
-		BlockData	bdata(i, param_a, param_b, param_k, param_r, -14.0+i, 1, 1, 1e-6, 1e-6, 1e-6);
+		BlockData	bdata(i, param_a, param_b, param_k, param_r, -14.0+i, 1, 1, 1e-9, 1e-9, 1e-9);
 		sim.add_local_block(bdata);
 	}
 	

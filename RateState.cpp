@@ -1,6 +1,7 @@
 #include "RateState.h"
 
-ViCaRS::ViCaRS(unsigned int total_num_blocks) :_num_global_blocks(total_num_blocks), _num_equations(NEQ) {
+ViCaRS::ViCaRS(unsigned int total_num_blocks) :_num_global_blocks(total_num_blocks), 
+ _num_equations(NEQ), log_approx(-40, 2, 1e12, 15, 100, 1e5) {
 	_solver_long = _solver_rupture = _current_solver = NULL;
 }
 
@@ -34,7 +35,7 @@ int ViCaRS::init(void) {
 	if (_abs_tol == NULL) return 1;
 	
 	// Initialize variables and tolerances
-	_rel_tol = RCONST(1.0e-8);
+	_rel_tol = RCONST(1.0e-10);
 	toldata = NV_DATA_P(_abs_tol);
 	for (it=_global_local_map.begin();it!=_global_local_map.end();++it) {
 		lid = it->second;
@@ -102,13 +103,15 @@ int ViCaRS::init(void) {
 	
 	// Set maximum number of steps per solver iteration
 	// This should be higher if the time step is less frequent or tolerance is lowered
-	flag = CVodeSetMaxNumSteps(_solver_long, 1000000);
+	flag = CVodeSetMaxNumSteps(_solver_long, 1e7);
 	if (flag != CV_SUCCESS) return 1;
-	flag = CVodeSetMaxNumSteps(_solver_rupture, 1000000);
+	flag = CVodeSetMaxNumSteps(_solver_rupture,1e7);
 	if (flag != CV_SUCCESS) return 1;
 
 	// Set the Jacobian x vector function
-	//flag = CVSpilsSetJacTimesVecFn(_solver, jacobian_times_vector);
+	flag = CVSpilsSetJacTimesVecFn(_solver_long, jacobian_times_vector);
+	if (flag != CV_SUCCESS) return 1;
+	flag = CVSpilsSetJacTimesVecFn(_solver_rupture, jacobian_times_vector);
 	if (flag != CV_SUCCESS) return 1;
 	
 	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
@@ -215,11 +218,11 @@ void ViCaRS::print_stats(void) {
     update_stats(_solver_long, _stats_long);
     
 	printf("\nSolver Statistics\t\tLong Term\tRupture\n");
-	printf("NumSteps\t\t\t\t%-6ld\t\t%-6ld\n", _stats_long._nst, _stats_rupture._nst);
-	printf("NumRhsEvals\t\t\t\t%-6ld\t\t%-6ld\n", _stats_long._nfe, _stats_rupture._nfe);
+	printf("NumSteps\t\t\t%-6ld\t\t%-6ld\n", _stats_long._nst, _stats_rupture._nst);
+	printf("NumRhsEvals\t\t\t%-6ld\t\t%-6ld\n", _stats_long._nfe, _stats_rupture._nfe);
 	printf("NumErrTestFails\t\t\t%-6ld\t\t%-6ld\n", _stats_long._netf, _stats_rupture._netf);
 	printf("NumNonlinSolvIters\t\t%-6ld\t\t%-6ld\n", _stats_long._nni, _stats_rupture._nni);
-	printf("NumNonlinSolvConvFails\t%-6ld\t\t%-6ld\n", _stats_long._ncfn, _stats_rupture._ncfn);
+	printf("NumNonlinSolvConvFails\t\t%-6ld\t\t%-6ld\n", _stats_long._ncfn, _stats_rupture._ncfn);
 	printf("NumJtimesEvals\t\t\t%-6ld\t\t%-6ld\n", _stats_long._njtv, _stats_rupture._njtv);
 	printf("NumRootFindEvals\t\t%-6ld\t\t%-6ld\n", _stats_long._nge, _stats_rupture._nge);
 }
@@ -243,13 +246,15 @@ int func(realtype t, N_Vector y, N_Vector ydot, void *user_data) {
 	
 	// Check if any velocity or theta values are below 0
 	local_fail = 0;
-	for (it=sim->begin();it!=sim->end();++it) {
+#ifndef USE_LOG_SPLINE
+  for (it=sim->begin();it!=sim->end();++it) {
 		if (Vth(y,it->second) <= 0 || Hth(y,it->second) <= 0) {
 			local_fail = 1;
 			break;
 		}
-	}
-	
+  }
+#endif
+
 	// Communicate with other processes to indicate whether or not to continue
 	// TODO: error check
 	MPI_Allreduce(&local_fail, &global_fail, 1, MPI_INT, MPI_LOR, MPI_COMM_WORLD);
@@ -280,7 +285,7 @@ int func(realtype t, N_Vector y, N_Vector ydot, void *user_data) {
 #ifdef SLOWNESS_LAW
 		Hth(ydot,lid) = RCONST(1) - h*v;
 #else
-		Hth(ydot,lid) = -h*v*log(h*v);
+		Hth(ydot,lid) = -h*v*sim->log_approx(h*v);
 #endif
 	}
 	
@@ -302,7 +307,6 @@ int rupture_test(realtype t, N_Vector y, realtype *gout, void *user_data) {
 	
 	return 0;
 }
-
 // Computes Jv = Jacobian times v in order to improve convergence for Krylov subspace solver
 int jacobian_times_vector(N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, void *user_data, N_Vector tmp) {
 	ViCaRS			*sim = (ViCaRS*)(user_data);
@@ -314,14 +318,25 @@ int jacobian_times_vector(N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vec
 		lid = it->second;
 		Xth(Jv,lid) =	1 * Vth(v,lid);
 		Vth(Jv,lid) =	(-RCONST(1)/sim->param_r(gid)) * Xth(v,lid)
+#ifdef USE_LOG_SPLINE
+						+ -(sim->param_k(gid)*sim->param_a(gid)*sim->log_approx.deriv((Vth(y,lid)))/(sim->param_r(gid))) * Vth(v,lid)
+#else
 						+ -(sim->param_k(gid)*sim->param_a(gid)/(sim->param_r(gid)*Vth(y,lid))) * Vth(v,lid)
+#endif
 						+ -(sim->param_k(gid)*sim->param_b(gid)/(sim->param_r(gid)*Hth(y,lid))) * Hth(v,lid);
 #ifdef SLOWNESS_LAW
 		Hth(Jv,lid) =	-Hth(y,lid) * Vth(v,lid)
 						+ -Vth(y,lid) * Hth(v,lid);
 #else
+  #ifdef USE_LOG_SPLINE
+    Hth(Jv,lid) = -Hth(y,lid)*(sim->log_approx(Hth(y,lid)*Vth(y,lid)) 
+                    + Hth(y,lid)*Vth(y,lid) * sim->log_approx.deriv(Hth(y,lid)*Vth(y,lid))) * Vth(v,lid)
+                  - Vth(y,lid)*(sim->log_approx(Hth(y,lid)*Vth(y,lid)) 
+                    + Hth(y,lid)*Vth(y,lid)*sim->log_approx.deriv(Hth(y,lid)*Vth(y,lid))) * Hth(v,lid);
+  #else
 		Hth(Jv,lid) =	-Hth(y,lid)*(log(Hth(y,lid)*Vth(y,lid)) + 1) * Vth(v,lid)
 						+ -Vth(y,lid)*(log(Vth(y,lid)*Hth(y,lid)) + 1) * Hth(v,lid);
+  #endif
 #endif
 		//std::cerr << lid << " " << gid << " " << Xth(Jv,lid) << " " << Vth(Jv,lid) << " " << Hth(Jv,lid) << std::endl;
 	}
