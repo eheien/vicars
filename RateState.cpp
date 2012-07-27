@@ -3,6 +3,7 @@
 ViCaRS::ViCaRS(unsigned int total_num_blocks) :_num_global_blocks(total_num_blocks), _num_equations(NEQ), log_approx(-40, 2, 1e12, 15, 100, 1e5) {
     _solver_long = _solver_rupture = _current_solver = NULL;
     _use_slowness_law = true;
+    _use_log_spline = true;
 }
 
 int ViCaRS::add_local_block(const BlockData &block_data) {
@@ -245,14 +246,14 @@ int func(realtype t, N_Vector y, N_Vector ydot, void *user_data) {
 	
 	// Check if any velocity or theta values are below 0
 	local_fail = 0;
-#ifndef USE_LOG_SPLINE
-  for (it=sim->begin();it!=sim->end();++it) {
-		if (Vth(y,it->second) <= 0 || Hth(y,it->second) <= 0) {
-			local_fail = 1;
-			break;
-		}
-  }
-#endif
+    if (sim->use_log_spline()) {
+        for (it=sim->begin();it!=sim->end();++it) {
+            if (Vth(y,it->second) <= 0 || Hth(y,it->second) <= 0) {
+                local_fail = 1;
+                break;
+            }
+        }
+    }
 
 	// Communicate with other processes to indicate whether or not to continue
 	// TODO: error check
@@ -282,7 +283,7 @@ int func(realtype t, N_Vector y, N_Vector ydot, void *user_data) {
 		Xth(ydot,lid) = v;
 		Vth(ydot,lid) = (t-x-friction_force-spring_force)/sim->param_r(gid);
         if (sim->use_slowness_law()) Hth(ydot,lid) = RCONST(1) - h*v;
-        else Hth(ydot,lid) = -h*v*sim->log_approx(h*v);
+        else Hth(ydot,lid) = -h*v*sim->log_func(h*v);
 	}
 	
 	delete global_x;
@@ -315,26 +316,17 @@ int jacobian_times_vector(N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vec
 		lid = it->second;
 		Xth(Jv,lid) =	1 * Vth(v,lid);
 		Vth(Jv,lid) =	(-RCONST(1)/sim->param_r(gid)) * Xth(v,lid)
-#ifdef USE_LOG_SPLINE
-						+ -(sim->param_k(gid)*sim->param_a(gid)*sim->log_approx.deriv((Vth(y,lid)))/(sim->param_r(gid))) * Vth(v,lid)
-#else
-						+ -(sim->param_k(gid)*sim->param_a(gid)/(sim->param_r(gid)*Vth(y,lid))) * Vth(v,lid)
-#endif
+						+ -(sim->param_k(gid)*sim->param_a(gid)*sim->log_deriv((Vth(y,lid)))/(sim->param_r(gid))) * Vth(v,lid)
 						+ -(sim->param_k(gid)*sim->param_b(gid)/(sim->param_r(gid)*Hth(y,lid))) * Hth(v,lid);
         
         if (sim->use_slowness_law()) {
             Hth(Jv,lid) =	-Hth(y,lid) * Vth(v,lid)
                             + -Vth(y,lid) * Hth(v,lid);
         } else {
-#ifdef USE_LOG_SPLINE
-            Hth(Jv,lid) = -Hth(y,lid)*(sim->log_approx(Hth(y,lid)*Vth(y,lid))
-                            + Hth(y,lid)*Vth(y,lid) * sim->log_approx.deriv(Hth(y,lid)*Vth(y,lid))) * Vth(v,lid)
-                            - Vth(y,lid)*(sim->log_approx(Hth(y,lid)*Vth(y,lid))
-                            + Hth(y,lid)*Vth(y,lid)*sim->log_approx.deriv(Hth(y,lid)*Vth(y,lid))) * Hth(v,lid);
-#else
-            Hth(Jv,lid) =	-Hth(y,lid)*(log(Hth(y,lid)*Vth(y,lid)) + 1) * Vth(v,lid)
-                            + -Vth(y,lid)*(log(Vth(y,lid)*Hth(y,lid)) + 1) * Hth(v,lid);
-#endif
+            Hth(Jv,lid) = -Hth(y,lid)*(sim->log_func(Hth(y,lid)*Vth(y,lid))
+                            + Hth(y,lid)*Vth(y,lid) * sim->log_deriv(Hth(y,lid)*Vth(y,lid))) * Vth(v,lid)
+                            - Vth(y,lid)*(sim->log_func(Hth(y,lid)*Vth(y,lid))
+                            + Hth(y,lid)*Vth(y,lid)*sim->log_deriv(Hth(y,lid)*Vth(y,lid))) * Hth(v,lid);
         }
 		//std::cerr << lid << " " << gid << " " << Xth(Jv,lid) << " " << Vth(Jv,lid) << " " << Hth(Jv,lid) << std::endl;
 	}
@@ -347,110 +339,16 @@ int jacobian_times_vector(N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vec
  */
 
 int simple_equations(realtype t, N_Vector y, N_Vector ydot, void *user_data) {
-    realtype		friction_force, spring_force, x, v, h, interact;
-    int				local_fail, global_fail;
-    unsigned int	lid, gid;
-    BlockGID		other_block;
-    ViCaRS			*sim = (ViCaRS*)(user_data);
-    GlobalLocalMap::const_iterator	it;
-    realtype		*global_x;
-    
-    // Check if any velocity or theta values are below 0
-    local_fail = 0;
-#ifndef USE_LOG_SPLINE
-    for (it=sim->begin();it!=sim->end();++it) {
-        if (Vth(y,it->second) <= 0 || Hth(y,it->second) <= 0) {
-            local_fail = 1;
-            break;
-        }
-    }
-#endif
-    
-    // Communicate with other processes to indicate whether or not to continue
-    // TODO: error check
-    MPI_Allreduce(&local_fail, &global_fail, 1, MPI_INT, MPI_LOR, MPI_COMM_WORLD);
-    if (global_fail) return 1;
-    
-    // Share X values over all processors to enable correct interaction between blocks
-    // TODO: only share X values with processors that need them
-    global_x = new realtype[sim->num_global_blocks()];
-    
-    for (it=sim->begin();it!=sim->end();++it) {
-        gid = it->first;
-        lid = it->second;
-        x = Xth(y,lid);
-        v = Vth(y,lid);
-        h = Hth(y,lid);
-        
-        friction_force = sim->param_k(gid)*sim->F(gid,v,h);
-        spring_force = 0;
-        for (other_block=0;other_block<sim->num_global_blocks();++other_block) {
-            interact = sim->interaction(gid, other_block);
-            if (interact > 0) {
-                spring_force += interact*(x-Xth(y,sim->global_to_local(other_block)));
-            }
-        }
-        
-        Xth(ydot,lid) = v;
-        Vth(ydot,lid) = (t-x-friction_force-spring_force)/sim->param_r(gid);
-        if (sim->use_slowness_law()) Hth(ydot,lid) = RCONST(1) - h*v;
-        else Hth(ydot,lid) = -h*v*sim->log_approx(h*v);
-    }
-    
-    delete global_x;
-    
     return 0;
 }
 
 // Function to determine when the simulation moves into rupture or long term mode
 // TODO: parallelize this function
 int simple_rupture_test(realtype t, N_Vector y, realtype *gout, void *user_data) {
-    GlobalLocalMap::const_iterator	it;
-    ViCaRS			*sim = (ViCaRS*)(user_data);
-    double			local_max = -DBL_MAX;
-    
-    for (it=sim->begin();it!=sim->end();++it) local_max = fmax(local_max, Vth(y,it->second));
-    
-    gout[0] = local_max - sim->rupture_threshold();
-    
     return 0;
 }
 
 // Computes Jv = Jacobian times v in order to improve convergence for Krylov subspace solver
 int simple_jacobian_times_vector(N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, void *user_data, N_Vector tmp) {
-    ViCaRS			*sim = (ViCaRS*)(user_data);
-    GlobalLocalMap::const_iterator	it;
-    unsigned int	lid, gid;
-    
-    for (it=sim->begin();it!=sim->end();++it) {
-        gid = it->first;
-        lid = it->second;
-        Xth(Jv,lid) =	1 * Vth(v,lid);
-        Vth(Jv,lid) =	(-RCONST(1)/sim->param_r(gid)) * Xth(v,lid)
-#ifdef USE_LOG_SPLINE
-        + -(sim->param_k(gid)*sim->param_a(gid)*sim->log_approx.deriv((Vth(y,lid)))/(sim->param_r(gid))) * Vth(v,lid)
-#else
-        + -(sim->param_k(gid)*sim->param_a(gid)/(sim->param_r(gid)*Vth(y,lid))) * Vth(v,lid)
-#endif
-        + -(sim->param_k(gid)*sim->param_b(gid)/(sim->param_r(gid)*Hth(y,lid))) * Hth(v,lid);
-        
-        if (sim->use_slowness_law()) {
-            Hth(Jv,lid) =	-Hth(y,lid) * Vth(v,lid)
-            + -Vth(y,lid) * Hth(v,lid);
-        } else {
-#ifdef USE_LOG_SPLINE
-            Hth(Jv,lid) = -Hth(y,lid)*(sim->log_approx(Hth(y,lid)*Vth(y,lid))
-                                       + Hth(y,lid)*Vth(y,lid) * sim->log_approx.deriv(Hth(y,lid)*Vth(y,lid))) * Vth(v,lid)
-            - Vth(y,lid)*(sim->log_approx(Hth(y,lid)*Vth(y,lid))
-                          + Hth(y,lid)*Vth(y,lid)*sim->log_approx.deriv(Hth(y,lid)*Vth(y,lid))) * Hth(v,lid);
-#else
-            Hth(Jv,lid) =	-Hth(y,lid)*(log(Hth(y,lid)*Vth(y,lid)) + 1) * Vth(v,lid)
-            + -Vth(y,lid)*(log(Vth(y,lid)*Hth(y,lid)) + 1) * Hth(v,lid);
-#endif
-        }
-        //std::cerr << lid << " " << gid << " " << Xth(Jv,lid) << " " << Vth(Jv,lid) << " " << Hth(Jv,lid) << std::endl;
-    }
-    
     return 0;
 }
-

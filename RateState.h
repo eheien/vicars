@@ -28,11 +28,13 @@
 #define EQ_V			1
 #define EQ_H			2
 
-#define USE_LOG_SPLINE
-
 int func(realtype t, N_Vector y, N_Vector ydot, void *user_data);
 int rupture_test(realtype t, N_Vector y, realtype *gout, void *user_data);
 int jacobian_times_vector(N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, void *user_data, N_Vector tmp);
+
+int simple_equations(realtype t, N_Vector y, N_Vector ydot, void *user_data);
+int simple_rupture_test(realtype t, N_Vector y, realtype *gout, void *user_data);
+int simple_jacobian_times_vector(N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, void *user_data, N_Vector tmp);
 
 typedef unsigned int BlockGID;
 
@@ -103,6 +105,14 @@ private:
     // Statistics on number of solver steps for long term and rupture solvers
     SolverStats             _stats_long, _stats_rupture;
     
+    // Whether to use the slowness law (var = true) or slip law (var = false)
+    bool                    _use_slowness_law;
+    
+	LogSpline	            log_approx;
+    
+    // Whether to use the log spline approximation or not
+    bool                    _use_log_spline;
+    
 public:
 	typedef GlobalLocalMap::iterator iterator;
 	typedef GlobalLocalMap::const_iterator const_iterator;
@@ -110,8 +120,6 @@ public:
 	ViCaRS(unsigned int total_num_blocks);
 	~ViCaRS(void) {};
 	
-	LogSpline	              log_approx;
-
 	const_iterator begin(void) const { return _global_local_map.begin(); };
 	iterator begin(void) { return _global_local_map.begin(); };
 	const_iterator end(void) const { return _global_local_map.end(); };
@@ -131,6 +139,9 @@ public:
 	void set_rupture_threshold(realtype new_threshold) { _rupture_threshold = new_threshold; };
 	realtype rupture_threshold(void) const { return _rupture_threshold; };
 	
+    bool use_slowness_law(void) const { return _use_slowness_law; };
+    bool use_log_spline(void) const { return _use_log_spline; };
+    
 	unsigned int num_global_blocks(void) const { return _num_global_blocks; };
 	unsigned int num_eqs(void) const { return _num_equations; };
 	
@@ -143,12 +154,18 @@ public:
 	realtype &V(BlockGID block_num) { unsigned int lid=_global_local_map[block_num]; return NV_DATA_P(_vars)[lid*_num_equations+1]; };
 	realtype &H(BlockGID block_num) { unsigned int lid=_global_local_map[block_num]; return NV_DATA_P(_vars)[lid*_num_equations+2]; };
 	
+    realtype log_func(realtype x) const {
+        if (_use_log_spline) return log_approx(x);
+        else return log(x);
+    }
+	
+    realtype log_deriv(realtype x) const {
+        if (_use_log_spline) return log_approx.deriv(x);
+        else return 1/x;
+    }
+    
 	realtype F(BlockGID block_num, realtype v, realtype h) {
-#ifdef USE_LOG_SPLINE
-		return 1 + param_a(block_num) * log_approx(v) + param_b(block_num)*log_approx(h);
-#else
-		return 1 + param_a(block_num)*log(v) + param_b(block_num)*log(h);
-#endif
+		return 1 + param_a(block_num) * log_func(v) + param_b(block_num)*log_func(h);
 	}
 	
 	void write_header(FILE *fp);

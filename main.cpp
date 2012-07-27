@@ -42,7 +42,9 @@ int main(int argc, char **argv)
 	
 	for (i=0;i<NBLOCKS;++i) {
         x_err = v_err = h_err = 0;//RCONST(1e-6);
-		BlockData	bdata(i, param_a, param_b, param_k, param_r, -14.0+i, 1, 1, x_err, v_err, h_err);
+        x_0 = -14.0 + i;
+        v_0 = h_0 = 1;
+		BlockData	bdata(i, param_a, param_b, param_k, param_r, x_0, v_0, h_0, x_err, v_err, h_err);
 		sim.add_local_block(bdata);
 	}
 	
