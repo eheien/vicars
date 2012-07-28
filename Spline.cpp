@@ -64,6 +64,7 @@ LogSpline::LogSpline(double _log_min, double _poly_pow, double _poly_c,
     log_sample_points << v[i] << " " << logv[i] << std::endl;
   }
   log_approx_graph.close();
+  log_sample_points.close();
 #endif
 
 #ifdef DEBUG

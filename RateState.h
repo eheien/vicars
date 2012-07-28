@@ -2,6 +2,7 @@
 #include <math.h>
 #include <vector>
 #include <iostream>
+#include "Matrix.h"
 #include "Spline.h"
 
 #include <mpi.h>
@@ -75,8 +76,8 @@ class ViCaRS {
 private:
 	unsigned int			_num_global_blocks;
 	unsigned int			_num_equations;
-	GlobalLocalMap			_global_local_map;
-	
+	GlobalLocalMap		_global_local_map;
+
 	// Vector of initial values, absolute tolerances, and calculated values arranged as follows:
 	// [Block1 X, Block1 V, Block1 H, Block2 X, Block2 X, Block2 H, ...]
 	N_Vector				_abs_tol;
@@ -97,22 +98,25 @@ private:
 	realtype                _rupture_timestep, _long_timestep;
     
 	// Whether the simulation is in rupture mode (var = true) or long term mode (var = false)
-    bool                    _in_rupture;
+  bool                    _in_rupture;
     
 	// When any block in the system reaches this speed, the system is considered to be in rupture mode
-    realtype                _rupture_threshold;
+  realtype                _rupture_threshold;
     
-    // Statistics on number of solver steps for long term and rupture solvers
-    SolverStats             _stats_long, _stats_rupture;
+  // Statistics on number of solver steps for long term and rupture solvers
+  SolverStats             _stats_long, _stats_rupture;
     
-    // Whether to use the slowness law (var = true) or slip law (var = false)
-    bool                    _use_slowness_law;
+  // Whether to use the slowness law (var = true) or slip law (var = false)
+  bool                    _use_slowness_law;
     
 	LogSpline	            log_approx;
     
-    // Whether to use the log spline approximation or not
-    bool                    _use_log_spline;
-    
+  // Whether to use the log spline approximation or not
+  bool                    _use_log_spline;
+   
+  VCDenseStdStraight greens_matrix;
+  int fill_greens_matrix(void);
+ 
 public:
 	typedef GlobalLocalMap::iterator iterator;
 	typedef GlobalLocalMap::const_iterator const_iterator;

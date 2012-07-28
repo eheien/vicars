@@ -1,6 +1,6 @@
 #include "RateState.h"
 
-ViCaRS::ViCaRS(unsigned int total_num_blocks) :_num_global_blocks(total_num_blocks), _num_equations(NEQ), log_approx(-40, 2, 1e12, 15, 100, 1e5) {
+ViCaRS::ViCaRS(unsigned int total_num_blocks) :_num_global_blocks(total_num_blocks), _num_equations(NEQ), greens_matrix(total_num_blocks, total_num_blocks), log_approx(-40, 2, 1e12, 15, 100, 1e5) {
     _solver_long = _solver_rupture = _current_solver = NULL;
     _use_slowness_law = true;
     _use_log_spline = true;
@@ -28,6 +28,9 @@ int ViCaRS::init(void) {
 	int				flag, rootdir[1];
 	realtype		*toldata;
 	GlobalLocalMap::const_iterator	it;
+
+  flag = fill_greens_matrix();
+  if (flag != 0) return 1;
 	
 	num_local = (unsigned int)_global_local_map.size();
 	_vars = N_VNew_Parallel(MPI_COMM_WORLD, num_local*_num_equations, _num_global_blocks*_num_equations);
@@ -170,9 +173,7 @@ void ViCaRS::cleanup(void) {
 }
 
 realtype ViCaRS::interaction(BlockGID a, BlockGID b) {
-	if (a!=b) return 0.2;
-	//if (fabs(a-b)==1) return 0.00001;
-	else return 0;
+  return greens_matrix.val(a,b);
 }
 
 void ViCaRS::write_header(FILE *fp) {
@@ -229,6 +230,29 @@ void ViCaRS::print_stats(void) {
 	printf("NumNonlinSolvConvFails\t\t%-6ld\t\t%-6ld\n", _stats_long._ncfn, _stats_rupture._ncfn);
 	printf("NumJtimesEvals\t\t\t%-6ld\t\t%-6ld\n", _stats_long._njtv, _stats_rupture._njtv);
 	printf("NumRootFindEvals\t\t%-6ld\t\t%-6ld\n", _stats_long._nge, _stats_rupture._nge);
+}
+
+int ViCaRS::fill_greens_matrix(void) {
+  int i, j, r;
+	GlobalLocalMap::const_iterator	it, jt;
+
+  double G = 3e10;
+  double L = 0.1;
+  double scale = 1e-9;
+
+  for (it=_global_local_map.begin(); it != _global_local_map.end(); ++it) {
+    i = it->second;
+    for (jt=_global_local_map.begin(); jt != _global_local_map.end(); ++jt) {
+      j = jt->second;
+      if (i==j) { greens_matrix.setVal(i,j,scale*-0.53*G/L); }
+      else {
+        r = abs(i-j);
+        greens_matrix.setVal(i,j,scale*0.98*G/(L*pow(((r/L)-1),3)));
+      }
+    }
+  }
+
+  return 0;
 }
 
 /*
