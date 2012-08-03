@@ -25,7 +25,7 @@ class VCDenseStd : public VCDenseMatrix {
 protected:
   double   *data;
 public:
-  VCDenseStd(const int &ncols, const int &nrows);
+  VCDenseStd(const unsigned int &ncols, const unsigned int &nrows);
   ~VCDenseStd(void);
   void allocateRow(const unsigned int &row) {};
   bool compressed(void) const { return false; };

@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <assert.h>
 
-VCDenseStd::VCDenseStd(const int &ncols, const int &nrows) : VCDenseMatrix(ncols, nrows) {
+VCDenseStd::VCDenseStd(const unsigned int &ncols, const unsigned int &nrows) : VCDenseMatrix(ncols, nrows) {
   data = (double*)valloc(sizeof(double)*ncols*nrows);
   assert(data);
   for (unsigned int i=0;i<ncols*nrows;++i) data[i] = 0;

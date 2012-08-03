@@ -1,6 +1,11 @@
 #include "RateState.h"
 
-ViCaRS::ViCaRS(unsigned int total_num_blocks) :_num_global_blocks(total_num_blocks), _num_equations(NEQ), greens_matrix(total_num_blocks, total_num_blocks), log_approx(-40, 2, 1e12, 15, 100, 1e5) {
+ViCaRS::ViCaRS(unsigned int total_num_blocks) 
+  : _num_global_blocks(total_num_blocks),
+    _num_equations(NEQ),
+    log_approx(-40, 2, 1e12, 1e5, 15),
+    greens_matrix(total_num_blocks, total_num_blocks)
+{
     _solver_long = _solver_rupture = _current_solver = NULL;
     _use_slowness_law = true;
     _use_log_spline = true;
@@ -212,8 +217,9 @@ void ViCaRS::update_stats(void *solver, SolverStats &stats) {
 	flag = CVodeGetNumNonlinSolvConvFails(solver, &ncfn);
 	flag = CVSpilsGetNumJtimesEvals(solver, &njtv);
 	flag = CVodeGetNumGEvals(solver, &nge);
-    
-    stats.add_counts(nst, nfe, nni, ncfn, netf, njtv, nge);
+  if (flag!=CV_SUCCESS) printf("failed to update SolverStats");
+
+  stats.add_counts(nst, nfe, nni, ncfn, netf, njtv, nge);
 }
 
 void ViCaRS::print_stats(void) {

@@ -1,9 +1,9 @@
 #include "Spline.h"
 
 LogSpline::LogSpline(double _log_min, double _poly_pow, double _poly_c,
-  int _npoints_poly, int _npoints_log, double _log_takeover)
-    : log_min(_log_min), poly_pow(_poly_pow), poly_c(_poly_c), npoints_poly(_npoints_poly),
-      npoints_log(_npoints_log), log_takeover(_log_takeover) {
+  double _log_takeover, int _npoints_poly)
+    : log_min(_log_min), poly_pow(_poly_pow), poly_c(_poly_c),
+      log_takeover(_log_takeover), npoints_poly(_npoints_poly) {
 
   unsigned int i;
   std::vector<double> v, logv;
@@ -27,7 +27,7 @@ LogSpline::LogSpline(double _log_min, double _poly_pow, double _poly_c,
   while (vi < log_takeover) {
     v.push_back(vi);
     logv.push_back(log(vi));
-    pweight *= 1.02;
+    pweight *= 1.03;
     vi *= pweight;
   }
 
