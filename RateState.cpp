@@ -24,6 +24,8 @@ int ViCaRS::add_local_block(const BlockData &block_data) {
 		_global_local_map[gid] = (unsigned int)_bdata.size();
 		_bdata.push_back(block_data);
 	}
+    
+    phase[gid] = 0;
 	
 	return 0;
 }
@@ -40,6 +42,8 @@ int ViCaRS::init(void) {
 	num_local = (unsigned int)_global_local_map.size();
 	_vars = N_VNew_Parallel(MPI_COMM_WORLD, num_local*_num_equations, _num_global_blocks*_num_equations);
 	if (_vars == NULL) return 1;
+	_stress = N_VNew_Parallel(MPI_COMM_WORLD, num_local, _num_global_blocks);
+	if (_stress == NULL) return 1;
 	_abs_tol = N_VNew_Parallel(MPI_COMM_WORLD, num_local*_num_equations, _num_global_blocks*_num_equations);
 	if (_abs_tol == NULL) return 1;
 	
@@ -74,8 +78,10 @@ int ViCaRS::init(void) {
 	// user's right hand side function in y'=f(t,y), the inital time, and
 	// the initial dependent variable vector.
 	_cur_time = 0;
-	flag = CVodeInit(_solver_long, func, _cur_time, _vars);
+	flag = CVodeInit(_solver_long, simple_equations, _cur_time, _vars);
 	if (flag != CV_SUCCESS) return 1;
+	//flag = CVodeInit(_solver_long, func, _cur_time, _vars);
+	//if (flag != CV_SUCCESS) return 1;
 	flag = CVodeInit(_solver_rupture, func, _cur_time, _vars);
 	if (flag != CV_SUCCESS) return 1;
 	
@@ -88,7 +94,7 @@ int ViCaRS::init(void) {
 	
 	// Set the root finding function, going above the rupture limit for long term solver
 	// and going below the limit for rupture solver.
-	flag = CVodeRootInit(_solver_long, 1, rupture_test);
+	flag = CVodeRootInit(_solver_long, 1, simple_rupture_test);
 	if (flag != CV_SUCCESS) return 1;
 	rootdir[0] = 1;
 	flag = CVodeSetRootDirection(_solver_long, rootdir);
@@ -121,10 +127,10 @@ int ViCaRS::init(void) {
 	if (flag != CV_SUCCESS) return 1;
 
 	// Set the Jacobian x vector function
-	flag = CVSpilsSetJacTimesVecFn(_solver_long, jacobian_times_vector);
-	if (flag != CV_SUCCESS) return 1;
-	flag = CVSpilsSetJacTimesVecFn(_solver_rupture, jacobian_times_vector);
-	if (flag != CV_SUCCESS) return 1;
+	//flag = CVSpilsSetJacTimesVecFn(_solver_long, jacobian_times_vector);
+	//if (flag != CV_SUCCESS) return 1;
+	//flag = CVSpilsSetJacTimesVecFn(_solver_rupture, jacobian_times_vector);
+	//if (flag != CV_SUCCESS) return 1;
 	
 	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -169,6 +175,7 @@ int ViCaRS::advance(void) {
 void ViCaRS::cleanup(void) {
 	// Free y and abstol vectors
 	N_VDestroy_Parallel(_vars);
+	N_VDestroy_Parallel(_stress);
 	N_VDestroy_Parallel(_abs_tol);
 	
 	// Free integrator memory
@@ -369,11 +376,50 @@ int jacobian_times_vector(N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vec
  */
 
 int simple_equations(realtype t, N_Vector y, N_Vector ydot, void *user_data) {
+	ViCaRS			*sim = (ViCaRS*)(user_data);
+	GlobalLocalMap::const_iterator	it, j;
+	unsigned int	lid;
+    int             phase;
+    BlockGID        gid;
+    realtype        x, v, h, tau, sigma, mu;
+    
+	for (it=sim->begin();it!=sim->end();++it) {
+		gid = it->first;
+		lid = it->second;
+        
+        phase = sim->phase[gid];
+		x = Xth(y,lid);
+		v = Vth(y,lid);
+		h = Hth(y,lid);
+        
+        // Calculate stress on a block as the sum of 
+        for (it=sim->begin();it!=sim->end();++it) {
+            mu = 1;
+            sigma = 1;
+            tau = sigma*(mu
+                         +(phase != 0 ? sim->param_a(gid)*log(v) : 0)
+                         +sim->param_b(gid)*log(h));
+            NV_Ith_P(sim->_stress,lid) = tau;
+        }
+        
+        Xth(ydot,lid) = v;
+        
+        if (phase == 0) {
+            Vth(ydot,lid) = 0;
+            Hth(ydot,lid) = 1;
+        } else if (phase == 1) {
+            Vth(ydot,lid) = t-x-sim->param_k(lid)*sim->F(gid, v, h);
+            Hth(ydot,lid) = 1.0-h*v;
+        } else if (phase == 2) {
+            Vth(ydot, lid) = 0;
+            Hth(ydot, lid) = 0;
+        }
+    }
+    
     return 0;
 }
 
 // Function to determine when the simulation moves into rupture or long term mode
-// TODO: parallelize this function
 int simple_rupture_test(realtype t, N_Vector y, realtype *gout, void *user_data) {
     return 0;
 }

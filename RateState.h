@@ -51,9 +51,9 @@ public:
 	BlockData(BlockGID gid, realtype a, realtype b, realtype k, realtype r,
 			  realtype init_x, realtype init_v, realtype init_h,
 			  realtype tol_x, realtype tol_v, realtype tol_h) :
-				_gid(gid), _a(a), _b(b), _k(k), _r(r),
-				_init_x(init_x), _init_v(init_v), _init_h(init_h),
-				_tol_x(tol_x), _tol_v(tol_v), _tol_h(tol_h) {};
+	_gid(gid), _a(a), _b(b), _k(k), _r(r),
+	_init_x(init_x), _init_v(init_v), _init_h(init_h),
+	_tol_x(tol_x), _tol_v(tol_v), _tol_h(tol_h) {};
 };
 
 class SolverStats {
@@ -76,17 +76,18 @@ class ViCaRS {
 private:
 	unsigned int			_num_global_blocks;
 	unsigned int			_num_equations;
-	GlobalLocalMap		_global_local_map;
-
+	GlobalLocalMap          _global_local_map;
+	
 	// Vector of initial values, absolute tolerances, and calculated values arranged as follows:
 	// [Block1 X, Block1 V, Block1 H, Block2 X, Block2 X, Block2 H, ...]
 	N_Vector				_abs_tol;
 	N_Vector				_vars;
+	
 	std::vector<BlockData>	_bdata;
 	
 	realtype				_rel_tol;
 	realtype				_cur_time;
-
+	
 	// CVODE solvers
 	void					*_solver_long, *_solver_rupture;
 	// Pointer to the currently active solver
@@ -98,29 +99,34 @@ private:
 	realtype                _rupture_timestep, _long_timestep;
     
 	// Whether the simulation is in rupture mode (var = true) or long term mode (var = false)
-  bool                    _in_rupture;
+	bool                    _in_rupture;
     
 	// When any block in the system reaches this speed, the system is considered to be in rupture mode
-  realtype                _rupture_threshold;
+	realtype                _rupture_threshold;
     
-  // Statistics on number of solver steps for long term and rupture solvers
-  SolverStats             _stats_long, _stats_rupture;
+	// Statistics on number of solver steps for long term and rupture solvers
+	SolverStats             _stats_long, _stats_rupture;
     
-  // Whether to use the slowness law (var = true) or slip law (var = false)
-  bool                    _use_slowness_law;
+	// Whether to use the slowness law (var = true) or slip law (var = false)
+	bool                    _use_slowness_law;
     
 	LogSpline	            log_approx;
     
-  // Whether to use the log spline approximation or not
-  bool                    _use_log_spline;
-   
-  VCDenseStdStraight greens_matrix;
-  int fill_greens_matrix(void);
- 
+	// Whether to use the log spline approximation or not
+	bool                    _use_log_spline;
+	
+	VCDenseStdStraight greens_matrix;
+	int fill_greens_matrix(void);
+	
 public:
+	N_Vector				_stress;
+	
 	typedef GlobalLocalMap::iterator iterator;
 	typedef GlobalLocalMap::const_iterator const_iterator;
 	
+    // Phase of each element
+    std::map<BlockGID, int> phase;
+    
 	ViCaRS(unsigned int total_num_blocks);
 	~ViCaRS(void) {};
 	
