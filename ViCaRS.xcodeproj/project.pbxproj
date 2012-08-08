@@ -10,6 +10,7 @@
 		AA1DA2021545E2050082AF78 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA1DA1FF1545E2050082AF78 /* main.cpp */; };
 		AA1DA2031545E2050082AF78 /* RateState.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA1DA2001545E2050082AF78 /* RateState.cpp */; };
 		AA1EE0C315C065D4003FA7AB /* Spline.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA1EE0C115C065D4003FA7AB /* Spline.cpp */; };
+		AAAB041915C4CB7A009C6DA3 /* Matrix.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AAAB041715C4CB7A009C6DA3 /* Matrix.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -31,6 +32,8 @@
 		AA1DA2011545E2050082AF78 /* RateState.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RateState.h; sourceTree = SOURCE_ROOT; };
 		AA1EE0C115C065D4003FA7AB /* Spline.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Spline.cpp; sourceTree = SOURCE_ROOT; };
 		AA1EE0C215C065D4003FA7AB /* Spline.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Spline.h; sourceTree = SOURCE_ROOT; };
+		AAAB041715C4CB7A009C6DA3 /* Matrix.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Matrix.cpp; sourceTree = SOURCE_ROOT; };
+		AAAB041815C4CB7A009C6DA3 /* Matrix.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Matrix.h; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -64,6 +67,8 @@
 			isa = PBXGroup;
 			children = (
 				AA1DA1FF1545E2050082AF78 /* main.cpp */,
+				AAAB041715C4CB7A009C6DA3 /* Matrix.cpp */,
+				AAAB041815C4CB7A009C6DA3 /* Matrix.h */,
 				AA1DA2001545E2050082AF78 /* RateState.cpp */,
 				AA1DA2011545E2050082AF78 /* RateState.h */,
 				AA1EE0C115C065D4003FA7AB /* Spline.cpp */,
@@ -126,6 +131,7 @@
 				AA1DA2021545E2050082AF78 /* main.cpp in Sources */,
 				AA1DA2031545E2050082AF78 /* RateState.cpp in Sources */,
 				AA1EE0C315C065D4003FA7AB /* Spline.cpp in Sources */,
+				AAAB041915C4CB7A009C6DA3 /* Matrix.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
