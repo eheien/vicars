@@ -76,7 +76,7 @@ class ViCaRS {
 private:
 	unsigned int			_num_global_blocks;
 	unsigned int			_num_equations;
-	GlobalLocalMap          _global_local_map;
+	GlobalLocalMap    _global_local_map;
 	
 	// Vector of initial values, absolute tolerances, and calculated values arranged as follows:
 	// [Block1 X, Block1 V, Block1 H, Block2 X, Block2 X, Block2 H, ...]
@@ -90,28 +90,35 @@ private:
 	
 	// CVODE solvers
 	void					*_solver_long, *_solver_rupture;
+
 	// Pointer to the currently active solver
 	void					*_current_solver;
 	
 	// Communication related variables
 	int						world_size, rank;
-	
+
+  // array for storing CVode roots
+  int *_roots, *_rootdirs;
+  
 	realtype                _rupture_timestep, _long_timestep;
-    
+
 	// Whether the simulation is in rupture mode (var = true) or long term mode (var = false)
 	bool                    _in_rupture;
-    
+
 	// When any block in the system reaches this speed, the system is considered to be in rupture mode
 	realtype                _rupture_threshold;
-    
+
 	// Statistics on number of solver steps for long term and rupture solvers
 	SolverStats             _stats_long, _stats_rupture;
-    
+
 	// Whether to use the slowness law (var = true) or slip law (var = false)
 	bool                    _use_slowness_law;
-    
-	LogSpline	            log_approx;
-    
+
+  // Whether to use simple (dieterich-style) equations or full rate/state equations
+  bool                    _use_simple_equations;
+
+	LogSpline	              log_approx;
+
 	// Whether to use the log spline approximation or not
 	bool                    _use_log_spline;
 	
@@ -119,14 +126,15 @@ private:
 	int fill_greens_matrix(void);
 	
 public:
-	N_Vector				_stress;
+	N_Vector _stress;
+  realtype h_ss, v_ss, v_eq;
 	
 	typedef GlobalLocalMap::iterator iterator;
 	typedef GlobalLocalMap::const_iterator const_iterator;
 	
-    // Phase of each element
-    std::map<BlockGID, int> phase;
-    
+  // Phase of each element
+  std::map<BlockGID, int> phase;
+
 	ViCaRS(unsigned int total_num_blocks);
 	~ViCaRS(void) {};
 	
@@ -137,21 +145,27 @@ public:
 	
 	int add_local_block(const BlockData &block_data);
 	unsigned int global_to_local(const BlockGID &gid) { return _global_local_map[gid]; };
+
+  void set_rootdir(BlockGID gid, int dir) { _rootdirs[gid] = dir; };
 	
 	int init(void);
+  int cvodes_init(void);
+  int cvodes_init_simple(void);
 	int advance(void);
+  int advance_simple(void);
 	void cleanup(void);
 	
 	realtype interaction(BlockGID a, BlockGID b);
 	void set_timesteps(realtype long_term_step, realtype rupture_step) { _long_timestep = long_term_step; _rupture_timestep = rupture_step; };
 	realtype get_time(void) const { return _cur_time; };
-    
+
 	void set_rupture_threshold(realtype new_threshold) { _rupture_threshold = new_threshold; };
 	realtype rupture_threshold(void) const { return _rupture_threshold; };
 	
-    bool use_slowness_law(void) const { return _use_slowness_law; };
-    bool use_log_spline(void) const { return _use_log_spline; };
-    
+  bool use_slowness_law(void) const { return _use_slowness_law; };
+  bool use_log_spline(void) const { return _use_log_spline; };
+  bool use_simple_equations(void) const { return _use_simple_equations; };
+
 	unsigned int num_global_blocks(void) const { return _num_global_blocks; };
 	unsigned int num_eqs(void) const { return _num_equations; };
 	
@@ -164,16 +178,16 @@ public:
 	realtype &V(BlockGID block_num) { unsigned int lid=_global_local_map[block_num]; return NV_DATA_P(_vars)[lid*_num_equations+1]; };
 	realtype &H(BlockGID block_num) { unsigned int lid=_global_local_map[block_num]; return NV_DATA_P(_vars)[lid*_num_equations+2]; };
 	
-    realtype log_func(realtype x) const {
-        if (_use_log_spline) return log_approx(x);
-        else return log(x);
-    }
+  realtype log_func(realtype x) const {
+    if (_use_log_spline) return log_approx(x);
+    else return log(x);
+  }
 	
-    realtype log_deriv(realtype x) const {
-        if (_use_log_spline) return log_approx.deriv(x);
-        else return 1/x;
-    }
-    
+  realtype log_deriv(realtype x) const {
+    if (_use_log_spline) return log_approx.deriv(x);
+    else return 1/x;
+  }
+
 	realtype F(BlockGID block_num, realtype v, realtype h) {
 		return 1 + param_a(block_num) * log_func(v) + param_b(block_num)*log_func(h);
 	}
