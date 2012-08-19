@@ -8,11 +8,12 @@ ViCaRS::ViCaRS(unsigned int total_num_blocks)
 {
     _solver_long = _solver_rupture = _current_solver = NULL;
     _use_slowness_law = true;
-    _use_log_spline = true;
+    _use_log_spline = false;
     _use_simple_equations = true;
-    h_ss = 6;
-    v_ss = 1/h_ss;
-    v_eq = 1;
+    v_ss = 0.01;
+    h_ss = 1/v_ss;
+    v_eq = 0.1;
+    v_min = 1e-7;
 }
 
 int ViCaRS::add_local_block(const BlockData &block_data) {
@@ -52,7 +53,7 @@ int ViCaRS::init(void) {
 	if (_abs_tol == NULL) return 1;
 	
 	// Initialize variables and tolerances
-	_rel_tol = RCONST(1.0e-8);
+	_rel_tol = RCONST(1.0e-6);
 	toldata = NV_DATA_P(_abs_tol);
 
 	for (it=_global_local_map.begin();it!=_global_local_map.end();++it) {
@@ -82,8 +83,8 @@ int ViCaRS::init(void) {
 
 int ViCaRS::cvodes_init(void) {
 	int				flag;
-  _rootdirs = new int[0];
-  _roots = new int[0];
+  _rootdirs = new int[1];
+  _roots = new int[1];
 
 	/* Call CVodeCreate to create the solver memory and specify the 
 	 * Backward Differentiation Formula and the use of a Newton iteration */
@@ -144,9 +145,9 @@ int ViCaRS::cvodes_init(void) {
 	
 	// Set maximum number of steps per solver iteration
 	// This should be higher if the time step is less frequent or tolerance is lowered
-	flag = CVodeSetMaxNumSteps(_solver_long, 1e7);
+	flag = CVodeSetMaxNumSteps(_solver_long, 1e10);
 	if (flag != CV_SUCCESS) return 1;
-	flag = CVodeSetMaxNumSteps(_solver_rupture,1e7);
+	flag = CVodeSetMaxNumSteps(_solver_rupture,1e10);
 	if (flag != CV_SUCCESS) return 1;
 
 	// Set the Jacobian x vector function
@@ -275,18 +276,19 @@ int ViCaRS::advance_simple(void) {
         // change block phase/root finding direction
         if (block_phase == 0) { 
           phase[gid] = 1;
-          set_rootdir(gid, 1);
           Vth(_vars,lid) = v_ss;
+          Hth(_vars,lid) = h_ss;
         }
         else if (block_phase == 1) {
           phase[gid] = 2;
-          set_rootdir(gid, -1);
+          Vth(_vars,lid) = v_eq;
         }
         else if (block_phase == 2) { 
           phase[gid] = 0;
-          set_rootdir(gid, -1);
-          Vth(_vars,lid) = 0;
+          Vth(_vars,lid) = v_min;
+          Hth(_vars,lid) = 1;
         }
+        else return -1;
       }
     }
 
@@ -351,9 +353,7 @@ void ViCaRS::cleanup(void) {
   delete _rootdirs;
 }
 
-realtype ViCaRS::interaction(BlockGID a, BlockGID b) {
-  return greens_matrix.val(a,b);
-}
+realtype ViCaRS::interaction(BlockGID a, BlockGID b) { return greens_matrix.val(a,b); };
 
 void ViCaRS::write_header(FILE *fp) {
 	GlobalLocalMap::const_iterator	it;
@@ -585,7 +585,7 @@ int simple_equations(realtype t, N_Vector y, N_Vector ydot, void *user_data) {
     } else if (phase == 2) {
         Vth(ydot,lid) = 0;
         Hth(ydot,lid) = 1.0-h*v;
-    } else return 1;
+    } else return -1;
   }
   return 0;
 }
@@ -603,11 +603,12 @@ int simple_rupture_test(realtype t, N_Vector y, realtype *gout, void *user_data)
     lid = it->second;
 
     phase = sim->phase[gid];
-    if (phase == 0 || phase == 2) {
-      gout[gid] = sim->F(gid, sim->v_ss, sim->h_ss) - NV_Ith_P(sim->_stress,lid);
-    }
+    if (phase == 0) gout[gid] = Hth(y,lid) - sim->h_ss;
     else if (phase == 1) {
-      gout[gid] = sim->v_eq - Vth(y,lid);
+      gout[gid] = Vth(y,lid) - sim->v_eq;
+    }
+    else if (phase == 2) {
+      gout[gid] = sim->h_ss - Hth(y,lid);
     }
     else return 1;
   }

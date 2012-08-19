@@ -127,7 +127,7 @@ private:
 	
 public:
 	N_Vector _stress;
-  realtype h_ss, v_ss, v_eq;
+  realtype h_ss, v_ss, v_eq, v_min;
 	
 	typedef GlobalLocalMap::iterator iterator;
 	typedef GlobalLocalMap::const_iterator const_iterator;
