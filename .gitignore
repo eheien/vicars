@@ -6,3 +6,8 @@ vicars
 log_approx.txt
 log_sample_points.txt
 plot.p
+autoplot.p
+logplot.p
+Session.vim
+plot_rs.p
+m_plot.p
