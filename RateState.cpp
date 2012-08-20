@@ -9,7 +9,7 @@ ViCaRS::ViCaRS(unsigned int total_num_blocks)
     _solver_long = _solver_rupture = _current_solver = NULL;
     _use_slowness_law = true;
     _use_log_spline = false;
-    _use_simple_equations = true;
+    _use_simple_equations = false;
     v_ss = 0.01;
     h_ss = 1/v_ss;
     v_eq = 0.1;
@@ -53,7 +53,7 @@ int ViCaRS::init(void) {
 	if (_abs_tol == NULL) return 1;
 	
 	// Initialize variables and tolerances
-	_rel_tol = RCONST(1.0e-6);
+	_rel_tol = RCONST(1.0e-7);
 	toldata = NV_DATA_P(_abs_tol);
 
 	for (it=_global_local_map.begin();it!=_global_local_map.end();++it) {
@@ -70,9 +70,6 @@ int ViCaRS::init(void) {
   // Init CVodes structures
   _use_simple_equations ? cvodes_init_simple() : cvodes_init();
 
-	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	
   // Set the current solver to be the long term
   _current_solver = _solver_long;
 
@@ -319,6 +316,8 @@ int ViCaRS::advance(void) {
 		return 0;
 	} else if (flag == CV_ROOT_RETURN) {
 
+    std::cout << "entering or leaving rupture" << std::endl;
+
     // Update the stats for each solver
     update_stats(_solver_long, _stats_long);
     update_stats(_solver_rupture, _stats_rupture);
@@ -427,9 +426,9 @@ int ViCaRS::fill_greens_matrix(void) {
   double scale = 1e-9;
 
   for (it=_global_local_map.begin(); it != _global_local_map.end(); ++it) {
-    i = it->second;
+    i = it->first;
     for (jt=_global_local_map.begin(); jt != _global_local_map.end(); ++jt) {
-      j = jt->second;
+      j = jt->first;
       if (i==j) { greens_matrix.setVal(i,j,scale*-0.53*G/L); }
       else {
         r = abs(i-j);
@@ -507,11 +506,14 @@ int rupture_test(realtype t, N_Vector y, realtype *gout, void *user_data) {
 	GlobalLocalMap::const_iterator	it;
 	ViCaRS			*sim = (ViCaRS*)(user_data);
 	double			local_max = -DBL_MAX;
+  realtype local_gout;
 	
 	for (it=sim->begin();it!=sim->end();++it) local_max = fmax(local_max, Vth(y,it->second));
 	
-	gout[0] = local_max - sim->rupture_threshold();
-	
+	local_gout = local_max - sim->rupture_threshold();
+
+	MPI_Allreduce(&local_gout, gout, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+
 	return 0;
 }
 
