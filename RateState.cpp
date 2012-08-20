@@ -13,7 +13,7 @@ ViCaRS::ViCaRS(unsigned int total_num_blocks)
     v_ss = 0.01;
     h_ss = 1/v_ss;
     v_eq = 0.1;
-    v_min = 1e-7;
+    v_min = 1e-9;
 }
 
 int ViCaRS::add_local_block(const BlockData &block_data) {
@@ -145,9 +145,9 @@ int ViCaRS::cvodes_init(void) {
 	
 	// Set maximum number of steps per solver iteration
 	// This should be higher if the time step is less frequent or tolerance is lowered
-	flag = CVodeSetMaxNumSteps(_solver_long, 1e10);
+	flag = CVodeSetMaxNumSteps(_solver_long, 1e7);
 	if (flag != CV_SUCCESS) return 1;
-	flag = CVodeSetMaxNumSteps(_solver_rupture,1e10);
+	flag = CVodeSetMaxNumSteps(_solver_rupture,1e7);
 	if (flag != CV_SUCCESS) return 1;
 
 	// Set the Jacobian x vector function
@@ -273,7 +273,7 @@ int ViCaRS::advance_simple(void) {
         // going into rupture mode: 0 -> 1 or 1 -> 2
         if (block_phase == 0 || block_phase == 1) _in_rupture = true;
 
-        // change block phase/root finding direction
+        // change block phase
         if (block_phase == 0) { 
           phase[gid] = 1;
           Vth(_vars,lid) = v_ss;
@@ -565,7 +565,6 @@ int simple_equations(realtype t, N_Vector y, N_Vector ydot, void *user_data) {
 		v = Vth(y,lid);
 		h = Hth(y,lid);
 
-    // Calculate stress on a block as the sum of 
     for (it=sim->begin();it!=sim->end();++it) {
         mu = 1;
         sigma = 1;
@@ -604,12 +603,8 @@ int simple_rupture_test(realtype t, N_Vector y, realtype *gout, void *user_data)
 
     phase = sim->phase[gid];
     if (phase == 0) gout[gid] = Hth(y,lid) - sim->h_ss;
-    else if (phase == 1) {
-      gout[gid] = Vth(y,lid) - sim->v_eq;
-    }
-    else if (phase == 2) {
-      gout[gid] = sim->h_ss - Hth(y,lid);
-    }
+    else if (phase == 1) gout[gid] = Vth(y,lid) - sim->v_eq;
+    else if (phase == 2) gout[gid] = sim->h_ss - Hth(y,lid);
     else return 1;
   }
 
