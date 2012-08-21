@@ -53,7 +53,7 @@ int ViCaRS::init(void) {
 	if (_abs_tol == NULL) return 1;
 	
 	// Initialize variables and tolerances
-	_rel_tol = RCONST(1.0e-7);
+	_rel_tol = RCONST(1.0e-10);
 	toldata = NV_DATA_P(_abs_tol);
 
 	for (it=_global_local_map.begin();it!=_global_local_map.end();++it) {
@@ -352,7 +352,7 @@ void ViCaRS::cleanup(void) {
   delete _rootdirs;
 }
 
-realtype ViCaRS::interaction(BlockGID a, BlockGID b) { return greens_matrix.val(a,b); };
+realtype ViCaRS::interaction(uint i, uint j) { return greens_matrix.val(i,j); };
 
 void ViCaRS::write_header(FILE *fp) {
 	GlobalLocalMap::const_iterator	it;
@@ -447,10 +447,9 @@ int ViCaRS::fill_greens_matrix(void) {
 int func(realtype t, N_Vector y, N_Vector ydot, void *user_data) {
 	realtype		friction_force, spring_force, x, v, h, interact;
 	int				local_fail, global_fail;
-	unsigned int	lid, gid;
-	BlockGID		other_block;
+	unsigned int	i_lid, j_lid, i_gid;
 	ViCaRS			*sim = (ViCaRS*)(user_data);
-	GlobalLocalMap::const_iterator	it;
+	GlobalLocalMap::const_iterator	it,jt;
 	realtype		*global_x;
 	
 	// Check if any velocity or theta values are below 0
@@ -474,25 +473,28 @@ int func(realtype t, N_Vector y, N_Vector ydot, void *user_data) {
 	global_x = new realtype[sim->num_global_blocks()];
 	
 	for (it=sim->begin();it!=sim->end();++it) {
-		gid = it->first;
-		lid = it->second;
-		x = Xth(y,lid);
-		v = Vth(y,lid);
-		h = Hth(y,lid);
+		i_gid = it->first;
+		i_lid = it->second;
+		x = Xth(y,i_lid);
+		v = Vth(y,i_lid);
+		h = Hth(y,i_lid);
 		
-		friction_force = sim->param_k(gid)*sim->F(gid,v,h);
+		friction_force = sim->param_k(i_gid)*sim->F(i_gid,v,h);
+
+    // calculate interaction force
 		spring_force = 0;
-		for (other_block=0;other_block<sim->num_global_blocks();++other_block) {
-			interact = sim->interaction(gid, other_block);
+		for (jt=sim->begin();jt!=sim->end();++jt) {
+      j_lid = jt->second;
+			interact = sim->interaction(i_lid,j_lid);
 			if (interact > 0) {
-				spring_force += interact*(x-Xth(y,sim->global_to_local(other_block)));
+				spring_force += 1e-5*interact*(x-Xth(y,j_lid));
 			}
 		}
 		
-		Xth(ydot,lid) = v;
-		Vth(ydot,lid) = (t-x-friction_force-spring_force)/sim->param_r(gid);
-        if (sim->use_slowness_law()) Hth(ydot,lid) = RCONST(1) - h*v;
-        else Hth(ydot,lid) = -h*v*sim->log_func(h*v);
+		Xth(ydot,i_lid) = v;
+		Vth(ydot,i_lid) = (t-x-friction_force-spring_force)/sim->param_r(i_gid);
+        if (sim->use_slowness_law()) Hth(ydot,i_lid) = RCONST(1) - h*v;
+        else Hth(ydot,i_lid) = -h*v*sim->log_func(h*v);
 	}
 	
 	delete global_x;
@@ -506,7 +508,7 @@ int rupture_test(realtype t, N_Vector y, realtype *gout, void *user_data) {
 	GlobalLocalMap::const_iterator	it;
 	ViCaRS			*sim = (ViCaRS*)(user_data);
 	double			local_max = -DBL_MAX;
-  realtype local_gout;
+  realtype    local_gout;
 	
 	for (it=sim->begin();it!=sim->end();++it) local_max = fmax(local_max, Vth(y,it->second));
 	

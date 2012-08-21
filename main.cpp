@@ -1,15 +1,15 @@
 #include "RateState.h"
 
-#define NBLOCKS			7
+#define NBLOCKS			2
 
 int main(int argc, char **argv)
 {
-	ViCaRS		sim(NBLOCKS);
+	ViCaRS		    sim(NBLOCKS);
 	unsigned int	i;
-	double		param_a, param_b, param_k, param_r;
-	FILE			*fp;
-	int				res;
-  int       world_size, rank;
+	double		    param_a, param_b, param_k, param_r;
+	FILE			    *fp;
+	int				    res;
+  int           world_size, rank;
 	
 	realtype		x_0, v_0, h_0, x_err, v_err, h_err;
 	double			side, A, G, v_p, mu_0, m, k, tau, g, L, rho, a, b;
@@ -45,7 +45,7 @@ int main(int argc, char **argv)
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
 	for (i=0;i<NBLOCKS;++i) {
-        x_err = v_err = h_err = 0;//RCONST(1e-4);
+        x_err = v_err = h_err = 0;//RCONST(1e-6);
         x_0 = -14.5 + i;
         h_0 = 1;
         v_0 = sim.v_min;
