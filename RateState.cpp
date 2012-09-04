@@ -13,7 +13,7 @@ ViCaRS::ViCaRS(unsigned int total_num_blocks)
     v_ss = 0.01;
     h_ss = 1/v_ss;
     v_eq = 0.1;
-    v_min = 1e-9;
+    v_min = 1e-9; // values in cvodes vectors cannot be zero, so use this as our 'zero'?
 }
 
 int ViCaRS::add_local_block(const BlockData &block_data) {
@@ -53,7 +53,7 @@ int ViCaRS::init(void) {
 	if (_abs_tol == NULL) return 1;
 	
 	// Initialize variables and tolerances
-	_rel_tol = RCONST(1.0e-10);
+	_rel_tol = RCONST(1.0e-7);
 	toldata = NV_DATA_P(_abs_tol);
 
 	for (it=_global_local_map.begin();it!=_global_local_map.end();++it) {
@@ -357,12 +357,19 @@ realtype ViCaRS::interaction(uint i, uint j) { return greens_matrix.val(i,j); };
 void ViCaRS::write_header(FILE *fp) {
 	GlobalLocalMap::const_iterator	it;
 	BlockGID		gid;
+  int world_size, rank;
+	
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  if (rank == 0) {
 	fprintf(fp, "t S ");
 	for (it=_global_local_map.begin();it!=_global_local_map.end();++it) {
 		gid = it->first;
 		fprintf(fp, "x%d v%d h%d F%d ", gid, gid, gid, gid);
 	}
 	fprintf(fp, "\n");
+  }
 }
 
 void ViCaRS::write_cur_data(FILE *fp) {
@@ -446,7 +453,7 @@ int ViCaRS::fill_greens_matrix(void) {
 
 int func(realtype t, N_Vector y, N_Vector ydot, void *user_data) {
 	realtype		friction_force, spring_force, x, v, h, interact;
-	int				local_fail, global_fail;
+	int				local_fail, global_fail, world_size, rank, i;
 	unsigned int	i_lid, j_lid, i_gid;
 	ViCaRS			*sim = (ViCaRS*)(user_data);
 	GlobalLocalMap::const_iterator	it,jt;
@@ -468,10 +475,22 @@ int func(realtype t, N_Vector y, N_Vector ydot, void *user_data) {
 	MPI_Allreduce(&local_fail, &global_fail, 1, MPI_INT, MPI_LOR, MPI_COMM_WORLD);
 	if (global_fail) return 1;
 	
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
 	// Share X values over all processors to enable correct interaction between blocks
 	// TODO: only share X values with processors that need them
-	global_x = new realtype[sim->num_global_blocks()];
-	
+	// if (rank == 0) global_x = new realtype[sim->num_global_blocks()];
+  // MPI_Bcast(global_x,sim->num_global_blocks(),MPI_DOUBLE,0,MPI_COMM_WORLD);
+
+	// for (it=sim->begin();it!=sim->end();++it) {
+  //  i_gid = it->first;
+  //  i_lid = it->second;
+  //  x = Xth(y,i_lid);
+  //}
+
+  // MPI_Bcast(global_x,sim->num_global_blocks(),MPI_DOUBLE,0,MPI_COMM_WORLD);
+
 	for (it=sim->begin();it!=sim->end();++it) {
 		i_gid = it->first;
 		i_lid = it->second;
@@ -487,7 +506,7 @@ int func(realtype t, N_Vector y, N_Vector ydot, void *user_data) {
       j_lid = jt->second;
 			interact = sim->interaction(i_lid,j_lid);
 			if (interact > 0) {
-				spring_force += 1e-5*interact*(x-Xth(y,j_lid));
+				spring_force += interact*(x-Xth(y,j_lid));
 			}
 		}
 		
