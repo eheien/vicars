@@ -11,3 +11,7 @@ logplot.p
 Session.vim
 plot_rs.p
 m_plot.p
+
+*.xcuserstate
+
+*.pbxproj
