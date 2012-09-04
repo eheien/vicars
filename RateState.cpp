@@ -480,17 +480,7 @@ int func(realtype t, N_Vector y, N_Vector ydot, void *user_data) {
 
 	// Share X values over all processors to enable correct interaction between blocks
 	// TODO: only share X values with processors that need them
-	// if (rank == 0) global_x = new realtype[sim->num_global_blocks()];
-  // MPI_Bcast(global_x,sim->num_global_blocks(),MPI_DOUBLE,0,MPI_COMM_WORLD);
-
-	// for (it=sim->begin();it!=sim->end();++it) {
-  //  i_gid = it->first;
-  //  i_lid = it->second;
-  //  x = Xth(y,i_lid);
-  //}
-
-  // MPI_Bcast(global_x,sim->num_global_blocks(),MPI_DOUBLE,0,MPI_COMM_WORLD);
-
+	
 	for (it=sim->begin();it!=sim->end();++it) {
 		i_gid = it->first;
 		i_lid = it->second;
