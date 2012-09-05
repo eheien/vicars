@@ -27,13 +27,13 @@
 
 /* Begin PBXFileReference section */
 		AA1DA1EA1545E1DE0082AF78 /* ViCaRS */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = ViCaRS; sourceTree = BUILT_PRODUCTS_DIR; };
-		AA1DA1FF1545E2050082AF78 /* main.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = SOURCE_ROOT; };
+		AA1DA1FF1545E2050082AF78 /* main.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = SOURCE_ROOT; usesTabs = 1; };
 		AA1DA2001545E2050082AF78 /* RateState.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = RateState.cpp; sourceTree = SOURCE_ROOT; usesTabs = 1; };
 		AA1DA2011545E2050082AF78 /* RateState.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RateState.h; sourceTree = SOURCE_ROOT; usesTabs = 1; };
-		AA1EE0C115C065D4003FA7AB /* Spline.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Spline.cpp; sourceTree = SOURCE_ROOT; };
-		AA1EE0C215C065D4003FA7AB /* Spline.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Spline.h; sourceTree = SOURCE_ROOT; };
-		AAAB041715C4CB7A009C6DA3 /* Matrix.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Matrix.cpp; sourceTree = SOURCE_ROOT; };
-		AAAB041815C4CB7A009C6DA3 /* Matrix.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Matrix.h; sourceTree = SOURCE_ROOT; };
+		AA1EE0C115C065D4003FA7AB /* Spline.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Spline.cpp; sourceTree = SOURCE_ROOT; usesTabs = 1; };
+		AA1EE0C215C065D4003FA7AB /* Spline.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Spline.h; sourceTree = SOURCE_ROOT; usesTabs = 1; };
+		AAAB041715C4CB7A009C6DA3 /* Matrix.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Matrix.cpp; sourceTree = SOURCE_ROOT; usesTabs = 1; };
+		AAAB041815C4CB7A009C6DA3 /* Matrix.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Matrix.h; sourceTree = SOURCE_ROOT; usesTabs = 1; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */

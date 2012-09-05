@@ -4,12 +4,11 @@
 
 int main(int argc, char **argv)
 {
-	ViCaRS		    sim(NBLOCKS);
+	ViCaRS			sim(NBLOCKS);
 	unsigned int	i;
-	double		    param_a, param_b, param_k, param_r;
-	FILE			    *fp;
-	int				    res;
-  int           world_size, rank;
+	double			param_a, param_b, param_k, param_r;
+	FILE			*fp;
+	int				res, world_size, rank;
 	
 	realtype		x_0, v_0, h_0, x_err, v_err, h_err;
 	double			side, A, G, v_p, mu_0, m, k, tau, g, L, rho, a, b;
@@ -35,22 +34,22 @@ int main(int argc, char **argv)
 	param_b = b/mu_0;
 	param_k = m*g*mu_0/(k*v_p);
 	param_r = pow(tau*v_p/(2*M_PI*L), 2);
-
+	
 	param_a = 0.0625;
 	param_b = 0.125;
 	param_k = 20;
 	param_r = 1e-6;
-
+	
 	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
+	
 	for (i=0;i<NBLOCKS;++i) {
         x_err = v_err = h_err = 0;//RCONST(1e-6);
         x_0 = -14.5 + i;
         h_0 = 1;
         v_0 = sim.v_min;
 		BlockData	bdata(i, param_a, param_b, param_k, param_r, x_0, v_0, h_0, x_err, v_err, h_err);
-    if ((i % world_size) == rank) sim.add_local_block(bdata);
+		if ((i % world_size) == rank) sim.add_local_block(bdata);
 	}
 	
 	// Set the threshold for a rupture to be 0.1 m/s
@@ -70,10 +69,10 @@ int main(int argc, char **argv)
 	while(sim.get_time() <= 500) {
 		res = sim.use_simple_equations() ? sim.advance_simple() : sim.advance();
 		if (res != 0) std::cerr << "Err " << res << " t: " << sim.get_time() << std::endl;
-    else std::cout << "successfully advanced (t: " << sim.get_time() << ")" << std::endl;
+		else std::cout << "successfully advanced (t: " << sim.get_time() << ")" << std::endl;
 		sim.write_cur_data(fp);
 	}
-
+	
 	fclose(fp);
 	
 	sim.print_stats();
