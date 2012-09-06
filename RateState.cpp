@@ -31,7 +31,7 @@ int ViCaRS::add_local_block(const BlockData &block_data) {
 
 int ViCaRS::init(void) {
 	unsigned int	num_local, lid;
-	int				flag;
+	int				flag, rootdir;
 	realtype		*toldata;
 	GlobalLocalMap::const_iterator	it;
 	
@@ -65,7 +65,17 @@ int ViCaRS::init(void) {
 	if (_use_simple_equations) _eqns = new SimpleEqns;
 	else _eqns = new OrigEqns;
 	
-	cvode_init();
+	_cur_time = 0;
+	
+	// Initialize the long term solver
+	rootdir = 1;
+	flag = init_solver(&_solver_long, rootdir);
+	if (flag) return flag;
+	
+	// And the rupture solver
+	rootdir = -1;
+	flag = init_solver(&_solver_rupture, rootdir);
+	if (flag) return flag;
 	
 	// Set the current solver to be the long term
 	_current_solver = _solver_long;
@@ -75,161 +85,62 @@ int ViCaRS::init(void) {
 	return 0;
 }
 
-int ViCaRS::cvode_init(void) {
-	int		flag, *rootdirs;
+int ViCaRS::init_solver(void **created_solver, int rootdir) {
+	void	*solver;
+	int		flag;
 	
-	rootdirs = new int[1];
-	
-	/* Call CVodeCreate to create the solver memory and specify the
-	 * Backward Differentiation Formula and the use of a Newton iteration */
-	_solver_long = CVodeCreate(CV_BDF, CV_NEWTON);
-	if (_solver_long == NULL) return 1;
-	_solver_rupture = CVodeCreate(CV_BDF, CV_NEWTON);
-	if (_solver_rupture == NULL) return 1;
+	// Call CVodeCreate to create the solver memory and specify the
+	// Backward Differentiation Formula and the use of a Newton iteration
+	solver = CVodeCreate(CV_BDF, CV_NEWTON);
+	if (solver == NULL) return 1;
 	
 	// Turn off error messages
-	//flag = CVodeSetErrFile(_solver_long, NULL);
+	//flag = CVodeSetErrFile(solver, NULL);
 	//if (flag != CV_SUCCESS) return 1;
-	//flag = CVodeSetErrFile(_solver_rupture, NULL);
-	//if (flag != CV_SUCCESS) return 1;
-	
+
 	// Call CVodeInit to initialize the integrator memory and specify the
 	// user's right hand side function in y'=f(t,y), the inital time, and
 	// the initial dependent variable vector.
-	_cur_time = 0;
-	
-	flag = CVodeInit(_solver_long, solve_odes, _cur_time, _vars);
-	if (flag != CV_SUCCESS) return 1;
-	flag = CVodeInit(_solver_rupture, solve_odes, _cur_time, _vars);
+	flag = CVodeInit(solver, solve_odes, _cur_time, _vars);
 	if (flag != CV_SUCCESS) return 1;
 	
 	// Call CVodeSVtolerances to specify the scalar relative tolerance
 	// and vector absolute tolerances
-	flag = CVodeSVtolerances(_solver_long, _rel_tol*100, _abs_tol);
-	if (flag != CV_SUCCESS) return 1;
-	flag = CVodeSVtolerances(_solver_rupture, _rel_tol, _abs_tol);
+	flag = CVodeSVtolerances(solver, _rel_tol, _abs_tol);
 	if (flag != CV_SUCCESS) return 1;
 	
 	// Set the root finding function, going above the rupture limit for long term solver
 	// and going below the limit for rupture solver.
-	flag = CVodeRootInit(_solver_long, 1, check_for_rupture);
+	flag = CVodeRootInit(solver, 1, check_for_rupture);
 	if (flag != CV_SUCCESS) return 1;
-	rootdirs[0] = 1;
-	flag = CVodeSetRootDirection(_solver_long, rootdirs);
-	if (flag != CV_SUCCESS) return 1;
-	
-	flag = CVodeRootInit(_solver_rupture, 1, check_for_rupture);
-	if (flag != CV_SUCCESS) return 1;
-	rootdirs[0] = -1;
-	flag = CVodeSetRootDirection(_solver_rupture, rootdirs);
+	flag = CVodeSetRootDirection(solver, &rootdir);
 	if (flag != CV_SUCCESS) return 1;
 	
 	// Call CVSpbcg to specify the CVSPBCG scaled preconditioned Bi-CGSTab iterative solver
 	// Currently not using any preconditioner
-	flag = CVSpbcg(_solver_long, PREC_NONE, 0);
+	flag = CVSpbcg(solver, PREC_NONE, 0);
 	if (flag != CV_SUCCESS) return 1;
-	flag = CVSpbcg(_solver_rupture, PREC_NONE, 0);
-	if (flag != CV_SUCCESS) return 1;
-	
-	// Set the user data
-	flag = CVodeSetUserData(_solver_long, this);
-	if (flag != CV_SUCCESS) return 1;
-	flag = CVodeSetUserData(_solver_rupture, this);
+
+	// Set the user data to be the main simulation object
+	flag = CVodeSetUserData(solver, this);
 	if (flag != CV_SUCCESS) return 1;
 	
 	// Set maximum number of steps per solver iteration
 	// This should be higher if the time step is less frequent or tolerance is lowered
-	flag = CVodeSetMaxNumSteps(_solver_long, 1e7);
-	if (flag != CV_SUCCESS) return 1;
-	flag = CVodeSetMaxNumSteps(_solver_rupture,1e7);
+	flag = CVodeSetMaxNumSteps(solver, 1e7);
 	if (flag != CV_SUCCESS) return 1;
 	
 	// Set the Jacobian x vector function
-	// flag = CVSpilsSetJacTimesVecFn(_solver_long, jacobian_times_vector);
-	// if (flag != CV_SUCCESS) return 1;
-	// flag = CVSpilsSetJacTimesVecFn(_solver_rupture, jacobian_times_vector);
-	// if (flag != CV_SUCCESS) return 1;
+	if (_eqns->has_jacobian()) {
+		flag = CVSpilsSetJacTimesVecFn(solver, jacobian_times_vector);
+		if (flag != CV_SUCCESS) return 1;
+	}
 	
-	delete rootdirs;
+	*created_solver = solver;
 	
 	return 0;
 }
-/*
-int ViCaRS::cvodes_init_simple(void) {
-	int flag;
-	_roots = new int[_num_global_blocks];
-	_rootdirs = new int[_num_global_blocks];
-	
-	unsigned int i;
-	for (i=0; i<_num_global_blocks; ++i) _rootdirs[i] = -1;
-	
-	_solver_long = CVodeCreate(CV_BDF, CV_NEWTON);
-	if (_solver_long == NULL) return 1;
-	_solver_rupture = CVodeCreate(CV_BDF, CV_NEWTON);
-	if (_solver_rupture == NULL) return 1;
-	
-	// Turn off error messages
-	//flag = CVodeSetErrFile(_solver_long, NULL);
-	//if (flag != CV_SUCCESS) return 1;
-	//flag = CVodeSetErrFile(_solver_rupture, NULL);
-	//if (flag != CV_SUCCESS) return 1;
-	
-	// Call CVodeInit to initialize the integrator memory and specify the
-	// user's right hand side function in y'=f(t,y), the inital time, and
-	// the initial dependent variable vector.
-	_cur_time = 0;
-	flag = CVodeInit(_solver_long, simple_equations, _cur_time, _vars);
-	if (flag != CV_SUCCESS) return 1;
-	flag = CVodeInit(_solver_rupture, simple_equations, _cur_time, _vars);
-	if (flag != CV_SUCCESS) return 1;
-	
-	// Call CVodeSVtolerances to specify the scalar relative tolerance
-	// and vector absolute tolerances
-	flag = CVodeSVtolerances(_solver_long, _rel_tol, _abs_tol);
-	if (flag != CV_SUCCESS) return 1;
-	flag = CVodeSVtolerances(_solver_rupture, _rel_tol, _abs_tol);
-	if (flag != CV_SUCCESS) return 1;
-	
-	// Set the root finding function, going above the rupture limit for long term solver
-	// and going below the limit for rupture solver.
-	flag = CVodeRootInit(_solver_long, 1, simple_rupture_test);
-	if (flag != CV_SUCCESS) return 1;
-	flag = CVodeSetRootDirection(_solver_long, _rootdirs);
-	if (flag != CV_SUCCESS) return 1;
-	
-	flag = CVodeRootInit(_solver_rupture, 1, simple_rupture_test);
-	if (flag != CV_SUCCESS) return 1;
-	flag = CVodeSetRootDirection(_solver_rupture, _rootdirs);
-	if (flag != CV_SUCCESS) return 1;
-	
-	// Call CVSpbcg to specify the CVSPBCG scaled preconditioned Bi-CGSTab iterative solver
-	// Currently not using any preconditioner
-	flag = CVSpbcg(_solver_long, PREC_NONE, 0);
-	if (flag != CV_SUCCESS) return 1;
-	flag = CVSpbcg(_solver_rupture, PREC_NONE, 0);
-	if (flag != CV_SUCCESS) return 1;
-	
-	// Set the user data
-	flag = CVodeSetUserData(_solver_long, this);
-	if (flag != CV_SUCCESS) return 1;
-	flag = CVodeSetUserData(_solver_rupture, this);
-	if (flag != CV_SUCCESS) return 1;
-	
-	// Set maximum number of steps per solver iteration
-	// This should be higher if the time step is less frequent or tolerance is lowered
-	flag = CVodeSetMaxNumSteps(_solver_long, 1e7);
-	if (flag != CV_SUCCESS) return 1;
-	flag = CVodeSetMaxNumSteps(_solver_rupture,1e7);
-	if (flag != CV_SUCCESS) return 1;
-	
-	// Set the Jacobian x vector function
-	//flag = CVSpilsSetJacTimesVecFn(_solver_long, simple_jacobian_times_vector);
-	//if (flag != CV_SUCCESS) return 1;
-	//flag = CVSpilsSetJacTimesVecFn(_solver_rupture, simple_jacobian_times_vector);
-	//if (flag != CV_SUCCESS) return 1;
-	
-	return 0;
-}*/
+
 /*
 int ViCaRS::advance_simple(void) {
 	int flag, block_phase;
@@ -237,19 +148,8 @@ int ViCaRS::advance_simple(void) {
 	unsigned int lid;
 	BlockGID gid;
 	
-	if (_in_rupture) tstep = _rupture_timestep;
-	else tstep = _long_timestep;
-	
-	flag = CVode(_current_solver, _cur_time+tstep, _vars, &_cur_time, CV_NORMAL);
-	
-	std::cout << _cur_time << std::endl;
-	
-	// No blocks changed phase
-	if (flag == CV_SUCCESS) return 0;
-	
 	// phase changed occured during last time-step
 	else if (flag == CV_ROOT_RETURN) {
-		std::cout << "entering or leaving rupture" << std::endl;
 		update_stats(_solver_long, _stats_long);
 		update_stats(_solver_rupture, _stats_rupture);
 		
@@ -289,15 +189,6 @@ int ViCaRS::advance_simple(void) {
 			}
 		}
 		
-		if (_in_rupture) _current_solver = _solver_rupture;
-		else _current_solver = _solver_long;
-		
-		// Re-Init both solvers
-		flag = CVodeReInit(_solver_long, _cur_time, _vars);
-		if (flag != CV_SUCCESS) return 1;
-		flag = CVodeReInit(_solver_rupture, _cur_time, _vars);
-		if (flag != CV_SUCCESS) return 1;
-		
 		return 0;
 	}
 	
@@ -315,9 +206,6 @@ int ViCaRS::advance(void) {
 	if (flag == CV_SUCCESS) {
 		return 0;
 	} else if (flag == CV_ROOT_RETURN) {
-		
-		std::cout << "entering or leaving rupture" << std::endl;
-		
 		// Update the stats for each solver
 		update_stats(_solver_long, _stats_long);
 		update_stats(_solver_rupture, _stats_rupture);
@@ -372,7 +260,7 @@ void ViCaRS::write_header(FILE *fp) {
 }
 
 void ViCaRS::write_summary_header(FILE *fp) {
-	fprintf(fp, "Time\t\tRupture\tV_min(GID)\tV_max(GID)\t\n");
+	fprintf(fp, "Time\t\tRupture\tV_min(GID)\t\tV_max(GID)\t\n");
 }
 
 void ViCaRS::write_summary(FILE *fp) {
@@ -394,7 +282,7 @@ void ViCaRS::write_summary(FILE *fp) {
 			max_v_gid = it->first;
 		}
 	}
-	fprintf(fp, "%0.2e\t%d\t%0.2e(%d)\t%0.2e(%d)\n", _cur_time, _in_rupture, min_v, min_v_gid, max_v, max_v_gid);
+	fprintf(fp, "%0.2e\t%d\t\t%0.2e(%d)\t%0.2e(%d)\n", _cur_time, _in_rupture, min_v, min_v_gid, max_v, max_v_gid);
 }
 
 void ViCaRS::write_cur_data(FILE *fp) {
@@ -643,10 +531,6 @@ int SimpleEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 		} else return -1;
 	}
 	
-	return 0;
-}
-
-int SimpleEqns::jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp) {
 	return 0;
 }
 

@@ -80,8 +80,12 @@ int main(int argc, char **argv)
 	
 	fclose(fp);
 	
+	sim.write_summary_header(stderr);
+	sim.write_summary(stderr);
+	
 	sim.print_stats();
 	
 	sim.cleanup();
+	
 	MPI_Finalize();
 }

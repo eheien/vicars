@@ -57,6 +57,7 @@ class ViCaRS;
 class EqnSolver {
 public:
 	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) = 0;
+	virtual bool has_jacobian(void) = 0;
 	virtual int jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp) = 0;
 	virtual int check_for_rupture(ViCaRS *sim, realtype t, N_Vector y, realtype *gout) = 0;
 	virtual bool values_valid(ViCaRS *sim, N_Vector y);
@@ -65,6 +66,7 @@ public:
 class OrigEqns : public EqnSolver {
 public:
 	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot);
+	virtual bool has_jacobian(void) { return true; };
 	virtual int jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp);
 	virtual int check_for_rupture(ViCaRS *sim, realtype t, N_Vector y, realtype *gout);
 };
@@ -76,7 +78,8 @@ private:
 	
 public:
 	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot);
-	virtual int jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp);
+	virtual bool has_jacobian(void) { return false; };
+	virtual int jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp) { return -1; };
 	virtual int check_for_rupture(ViCaRS *sim, realtype t, N_Vector y, realtype *gout);
 };
 
@@ -167,7 +170,7 @@ public:
 	unsigned int global_to_local(const BlockGID &gid) { return _global_local_map[gid]; };
 	
 	int init(void);
-	int cvode_init(void);
+	int init_solver(void **solver, int rootdir);
 	int advance(void);
 	int advance_simple(void);
 	void cleanup(void);
