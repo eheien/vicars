@@ -121,9 +121,6 @@ private:
 	// Communication related variables
 	int						world_size, rank;
 	
-	// array for storing CVode roots
-	int						*_roots, *_rootdirs;
-	
 	realtype                _rupture_timestep, _long_timestep;
 	
 	// Whether the simulation is in rupture mode (var = true) or long term mode (var = false)
@@ -141,7 +138,7 @@ private:
 	// Whether to use simple (dieterich-style) equations or full rate/state equations
 	bool                    _use_simple_equations;
 	
-	LogSpline	              log_approx;
+	LogSpline				log_approx;
 	
 	// Whether to use the log spline approximation or not
 	bool                    _use_log_spline;
@@ -168,8 +165,6 @@ public:
 	
 	int add_local_block(const BlockData &block_data);
 	unsigned int global_to_local(const BlockGID &gid) { return _global_local_map[gid]; };
-	
-	void set_rootdir(BlockGID gid, int dir) { _rootdirs[gid] = dir; };
 	
 	int init(void);
 	int cvode_init(void);

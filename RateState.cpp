@@ -47,7 +47,7 @@ int ViCaRS::init(void) {
 	if (_abs_tol == NULL) return 1;
 	
 	// Initialize variables and tolerances
-	_rel_tol = RCONST(1.0e-7);
+	_rel_tol = RCONST(1.0e-8);
 	toldata = NV_DATA_P(_abs_tol);
 	
 	for (it=_global_local_map.begin();it!=_global_local_map.end();++it) {
@@ -76,10 +76,9 @@ int ViCaRS::init(void) {
 }
 
 int ViCaRS::cvode_init(void) {
-	int				flag;
+	int		flag, *rootdirs;
 	
-	_rootdirs = new int[1];
-	_roots = new int[1];
+	rootdirs = new int[1];
 	
 	/* Call CVodeCreate to create the solver memory and specify the
 	 * Backward Differentiation Formula and the use of a Newton iteration */
@@ -115,14 +114,14 @@ int ViCaRS::cvode_init(void) {
 	// and going below the limit for rupture solver.
 	flag = CVodeRootInit(_solver_long, 1, check_for_rupture);
 	if (flag != CV_SUCCESS) return 1;
-	_rootdirs[0] = 1;
-	flag = CVodeSetRootDirection(_solver_long, _rootdirs);
+	rootdirs[0] = 1;
+	flag = CVodeSetRootDirection(_solver_long, rootdirs);
 	if (flag != CV_SUCCESS) return 1;
 	
 	flag = CVodeRootInit(_solver_rupture, 1, check_for_rupture);
 	if (flag != CV_SUCCESS) return 1;
-	_rootdirs[0] = -1;
-	flag = CVodeSetRootDirection(_solver_rupture, _rootdirs);
+	rootdirs[0] = -1;
+	flag = CVodeSetRootDirection(_solver_rupture, rootdirs);
 	if (flag != CV_SUCCESS) return 1;
 	
 	// Call CVSpbcg to specify the CVSPBCG scaled preconditioned Bi-CGSTab iterative solver
@@ -150,6 +149,8 @@ int ViCaRS::cvode_init(void) {
 	// if (flag != CV_SUCCESS) return 1;
 	// flag = CVSpilsSetJacTimesVecFn(_solver_rupture, jacobian_times_vector);
 	// if (flag != CV_SUCCESS) return 1;
+	
+	delete rootdirs;
 	
 	return 0;
 }
@@ -347,8 +348,6 @@ void ViCaRS::cleanup(void) {
 	// Free integrator memory
 	CVodeFree(&_solver_rupture);
 	
-	delete _roots;
-	delete _rootdirs;
 	delete _eqns;
 }
 

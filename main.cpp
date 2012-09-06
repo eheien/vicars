@@ -72,7 +72,7 @@ int main(int argc, char **argv)
 			std::cerr << "Err " << res << " t: " << sim.get_time() << std::endl;
 			break;
 		}
-		else std::cout << "successfully advanced (t: " << sim.get_time() << ")" << std::endl;
+		//else std::cout << "successfully advanced (t: " << sim.get_time() << ")" << std::endl;
 		sim.write_cur_data(fp);
 	}
 	
