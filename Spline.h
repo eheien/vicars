@@ -9,8 +9,8 @@
 #define TOL 1e-15
 #define MAXITER 1000
 
-//#define DEBUG
-//#define OUTPUT
+//#define DEBUG_SPLINE
+//#define OUTPUT_SPLINE
 
 class LogSpline {
 private:

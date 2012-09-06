@@ -29,13 +29,9 @@
 #define EQ_V			1
 #define EQ_H			2
 
-int func(realtype t, N_Vector y, N_Vector ydot, void *user_data);
-int rupture_test(realtype t, N_Vector y, realtype *gout, void *user_data);
+int solve_odes(realtype t, N_Vector y, N_Vector ydot, void *user_data);
 int jacobian_times_vector(N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, void *user_data, N_Vector tmp);
-
-int simple_equations(realtype t, N_Vector y, N_Vector ydot, void *user_data);
-int simple_rupture_test(realtype t, N_Vector y, realtype *gout, void *user_data);
-int simple_jacobian_times_vector(N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, void *user_data, N_Vector tmp);
+int check_for_rupture(realtype t, N_Vector y, realtype *gout, void *user_data);
 
 typedef unsigned int BlockGID;
 
@@ -54,6 +50,34 @@ public:
 	_gid(gid), _a(a), _b(b), _k(k), _r(r),
 	_init_x(init_x), _init_v(init_v), _init_h(init_h),
 	_tol_x(tol_x), _tol_v(tol_v), _tol_h(tol_h) {};
+};
+
+class ViCaRS;
+
+class EqnSolver {
+public:
+	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) = 0;
+	virtual int jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp) = 0;
+	virtual int check_for_rupture(ViCaRS *sim, realtype t, N_Vector y, realtype *gout) = 0;
+	virtual bool values_valid(ViCaRS *sim, N_Vector y);
+};
+
+class OrigEqns : public EqnSolver {
+public:
+	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot);
+	virtual int jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp);
+	virtual int check_for_rupture(ViCaRS *sim, realtype t, N_Vector y, realtype *gout);
+};
+
+class SimpleEqns : public EqnSolver {
+private:
+	// Phase of each element
+	std::map<BlockGID, int> phase;
+	
+public:
+	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot);
+	virtual int jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp);
+	virtual int check_for_rupture(ViCaRS *sim, realtype t, N_Vector y, realtype *gout);
 };
 
 class SolverStats {
@@ -76,7 +100,7 @@ class ViCaRS {
 private:
 	unsigned int			_num_global_blocks;
 	unsigned int			_num_equations;
-	GlobalLocalMap    _global_local_map;
+	GlobalLocalMap			_global_local_map;
 	
 	// Vector of initial values, absolute tolerances, and calculated values arranged as follows:
 	// [Block1 X, Block1 V, Block1 H, Block2 X, Block2 X, Block2 H, ...]
@@ -98,7 +122,7 @@ private:
 	int						world_size, rank;
 	
 	// array for storing CVode roots
-	int *_roots, *_rootdirs;
+	int						*_roots, *_rootdirs;
 	
 	realtype                _rupture_timestep, _long_timestep;
 	
@@ -122,6 +146,8 @@ private:
 	// Whether to use the log spline approximation or not
 	bool                    _use_log_spline;
 	
+	EqnSolver				*_eqns;
+	
 	VCDenseStdStraight greens_matrix;
 	int fill_greens_matrix(void);
 	
@@ -131,9 +157,6 @@ public:
 	
 	typedef GlobalLocalMap::iterator iterator;
 	typedef GlobalLocalMap::const_iterator const_iterator;
-	
-	// Phase of each element
-	std::map<BlockGID, int> phase;
 	
 	ViCaRS(unsigned int total_num_blocks);
 	~ViCaRS(void) {};
@@ -149,11 +172,12 @@ public:
 	void set_rootdir(BlockGID gid, int dir) { _rootdirs[gid] = dir; };
 	
 	int init(void);
-	int cvodes_init(void);
-	int cvodes_init_simple(void);
+	int cvode_init(void);
 	int advance(void);
 	int advance_simple(void);
 	void cleanup(void);
+	
+	EqnSolver *get_eqns(void) { return _eqns; };
 	
 	realtype interaction(BlockGID a, BlockGID b);
 	void set_timesteps(realtype long_term_step, realtype rupture_step) { _long_timestep = long_term_step; _rupture_timestep = rupture_step; };

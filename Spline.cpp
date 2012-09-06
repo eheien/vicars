@@ -53,7 +53,7 @@ log_takeover(_log_takeover), npoints_poly(_npoints_poly) {
 	spline = gsl_spline_alloc (gsl_interp_cspline, num_points);
 	gsl_spline_init (spline, v_arr, logv_arr, num_points);
 	
-#ifdef OUTPUT
+#ifdef OUTPUT_SPLINE
 	std::ofstream log_approx_graph, log_sample_points;
 	log_approx_graph.open ("log_approx.txt");
 	log_sample_points.open ("log_sample_points.txt");
@@ -67,7 +67,7 @@ log_takeover(_log_takeover), npoints_poly(_npoints_poly) {
 	log_sample_points.close();
 #endif
 	
-#ifdef DEBUG
+#ifdef DEBUG_SPLINE
 	std::cout << "POW/LOG INTERSECTION : " << isct << std::endl;
 	std::cout << "# SAMPLE POINTS : " << v.size() << std::endl;
 #endif
