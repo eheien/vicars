@@ -69,7 +69,9 @@ int main(int argc, char **argv)
 	while(sim.get_time() <= 500) {
 		res = sim.advance();
 		if (res != 0) {
-			std::cerr << "Err " << res << " t: " << sim.get_time() << std::endl;
+			std::cerr << "Err " << res << std::endl;
+			sim.write_summary_header(stderr);
+			sim.write_summary(stderr);
 			break;
 		}
 		//else std::cout << "successfully advanced (t: " << sim.get_time() << ")" << std::endl;

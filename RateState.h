@@ -212,6 +212,8 @@ public:
 	}
 	
 	void write_header(FILE *fp);
+	void write_summary(FILE *fp);
+	void write_summary_header(FILE *fp);
 	void write_cur_data(FILE *fp);
 	
 	void print_stats(void);

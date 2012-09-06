@@ -47,7 +47,7 @@ int ViCaRS::init(void) {
 	if (_abs_tol == NULL) return 1;
 	
 	// Initialize variables and tolerances
-	_rel_tol = RCONST(1.0e-8);
+	_rel_tol = RCONST(1.0e-7);
 	toldata = NV_DATA_P(_abs_tol);
 	
 	for (it=_global_local_map.begin();it!=_global_local_map.end();++it) {
@@ -105,7 +105,7 @@ int ViCaRS::cvode_init(void) {
 	
 	// Call CVodeSVtolerances to specify the scalar relative tolerance
 	// and vector absolute tolerances
-	flag = CVodeSVtolerances(_solver_long, _rel_tol, _abs_tol);
+	flag = CVodeSVtolerances(_solver_long, _rel_tol*100, _abs_tol);
 	if (flag != CV_SUCCESS) return 1;
 	flag = CVodeSVtolerances(_solver_rupture, _rel_tol, _abs_tol);
 	if (flag != CV_SUCCESS) return 1;
@@ -369,6 +369,32 @@ void ViCaRS::write_header(FILE *fp) {
 		}
 		fprintf(fp, "\n");
 	}
+}
+
+void ViCaRS::write_summary_header(FILE *fp) {
+	fprintf(fp, "Time\t\tRupture\tV_min(GID)\tV_max(GID)\t\n");
+}
+
+void ViCaRS::write_summary(FILE *fp) {
+	realtype		v, min_v, max_v;
+	BlockGID		min_v_gid, max_v_gid;
+	GlobalLocalMap::const_iterator	it;
+	
+	min_v = DBL_MAX;
+	max_v = -DBL_MAX;
+	
+	for (it=begin();it!=end();++it) {
+		v = V(it->first);
+		if (min_v >= v) {
+			min_v = v;
+			min_v_gid = it->first;
+		}
+		if (max_v <= v) {
+			max_v = v;
+			max_v_gid = it->first;
+		}
+	}
+	fprintf(fp, "%0.2e\t%d\t%0.2e(%d)\t%0.2e(%d)\n", _cur_time, _in_rupture, min_v, min_v_gid, max_v, max_v_gid);
 }
 
 void ViCaRS::write_cur_data(FILE *fp) {
