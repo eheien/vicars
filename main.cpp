@@ -41,7 +41,7 @@ int main(int argc, char **argv)
         x_err = v_err = h_err = RCONST(1e-6);
         x_0 = -14.5 + i;
         h_0 = 1;
-        v_0 = 1;
+        v_0 = 0;
 		BlockData	bdata(param_a, param_b, param_k, param_r, x_0, v_0, h_0, x_err, v_err, h_err);
 		sim.add_block(i, bdata);
 	}
@@ -68,7 +68,6 @@ int main(int argc, char **argv)
 			sim.write_summary(stderr);
 			break;
 		}
-		//else std::cout << "successfully advanced (t: " << sim.get_time() << ")" << std::endl;
 		sim.write_cur_data(fp);
 	}
 	

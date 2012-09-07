@@ -16,20 +16,11 @@
 
 // Format of result vector: [x0, v0, h0, x1, v1, h1, ..., xn, vn, hn]
 
-#define Xth(y,block)	NV_Ith_S(y,block*NEQ+0)
-#define Vth(y,block)	NV_Ith_S(y,block*NEQ+1)
-#define Hth(y,block)	NV_Ith_S(y,block*NEQ+2)
-
 /* Problem Constants */
-
-#define NEQ				3
-#define EQ_X			0
-#define EQ_V			1
-#define EQ_H			2
 
 int solve_odes(realtype t, N_Vector y, N_Vector ydot, void *user_data);
 int jacobian_times_vector(N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, void *user_data, N_Vector tmp);
-int check_for_rupture(realtype t, N_Vector y, realtype *gout, void *user_data);
+int check_for_mode_change(realtype t, N_Vector y, realtype *gout, void *user_data);
 
 typedef unsigned int BlockGID;
 
@@ -56,23 +47,33 @@ class EqnSolver {
 public:
 	virtual ~EqnSolver(void) {};
 	virtual int init(ViCaRS *sim) = 0;
+	virtual unsigned int num_equations(void) = 0;
 	
 	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) = 0;
 	virtual bool has_jacobian(void) = 0;
 	virtual int jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp) = 0;
-	virtual int check_for_rupture(ViCaRS *sim, realtype t, N_Vector y, realtype *gout) = 0;
-	virtual bool values_valid(ViCaRS *sim, N_Vector y);
+	virtual int check_for_mode_change(ViCaRS *sim, realtype t, N_Vector y, realtype *gout) = 0;
+	virtual void handle_mode_change(ViCaRS *sim, realtype t, N_Vector y) = 0;
+	virtual bool values_valid(ViCaRS *sim, N_Vector y) = 0;
 };
 
 class OrigEqns : public EqnSolver {
 public:
 	virtual ~OrigEqns(void) {};
+	
 	virtual int init(ViCaRS *sim);
+	virtual unsigned int num_equations(void) { return 3; };
 	
 	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot);
 	virtual bool has_jacobian(void) { return true; };
 	virtual int jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp);
-	virtual int check_for_rupture(ViCaRS *sim, realtype t, N_Vector y, realtype *gout);
+	virtual int check_for_mode_change(ViCaRS *sim, realtype t, N_Vector y, realtype *gout);
+	virtual void handle_mode_change(ViCaRS *sim, realtype t, N_Vector y);
+	virtual bool values_valid(ViCaRS *sim, N_Vector y);
+
+	realtype &Xth(N_Vector y, BlockGID bnum) { return NV_Ith_S(y,bnum*3+0); };
+	realtype &Vth(N_Vector y, BlockGID bnum) { return NV_Ith_S(y,bnum*3+1); };
+	realtype &Hth(N_Vector y, BlockGID bnum) { return NV_Ith_S(y,bnum*3+2); };
 };
 
 class SimpleEqns : public EqnSolver {
@@ -80,19 +81,26 @@ private:
 	// Phase of each element
 	std::map<BlockGID, int> phase;
 	
-	realtype		mu_0, A, B;
+	std::map<BlockGID, realtype>	_ss_stress, _stress_loading, _start_time, _vel, _v_eq;
+	std::map<BlockGID, realtype>	_base_stress, _elem_stress;
 	
-	N_Vector		_ss_stress, _stress_loading;
+	realtype		mu_0, A, B, D_c, sigma_i, _v_star, _theta_star;
 	
 public:
-	SimpleEqns(void) : mu_0(0.5), A(0.005), B(0.015), _ss_stress(NULL), _stress_loading(NULL) {};
-	virtual ~SimpleEqns(void) { if (_ss_stress) N_VDestroy_Serial(_ss_stress); if (_stress_loading) N_VDestroy_Serial(_stress_loading); };
+	SimpleEqns(void) {};
+	virtual ~SimpleEqns(void) {};
 	virtual int init(ViCaRS *sim);
+	virtual unsigned int num_equations(void) { return 2; };
 	
 	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot);
 	virtual bool has_jacobian(void) { return false; };
 	virtual int jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp) { return -1; };
-	virtual int check_for_rupture(ViCaRS *sim, realtype t, N_Vector y, realtype *gout);
+	virtual int check_for_mode_change(ViCaRS *sim, realtype t, N_Vector y, realtype *gout);
+	virtual void handle_mode_change(ViCaRS *sim, realtype t, N_Vector y);
+	virtual bool values_valid(ViCaRS *sim, N_Vector y) { return true; };
+	
+	realtype &Xth(N_Vector y, BlockGID bnum) { return NV_Ith_S(y,bnum*2+0); };
+	realtype &Hth(N_Vector y, BlockGID bnum) { return NV_Ith_S(y,bnum*2+1); };
 };
 
 class SolverStats {
@@ -163,7 +171,7 @@ private:
 	
 public:
 	N_Vector _stress;
-	realtype h_ss, v_ss, v_eq, v_min;
+	//realtype h_ss, v_ss, v_eq, v_min;
 	
 	typedef BlockMap::iterator iterator;
 	typedef BlockMap::const_iterator const_iterator;

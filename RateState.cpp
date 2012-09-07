@@ -1,16 +1,16 @@
 #include "RateState.h"
 
-ViCaRS::ViCaRS(unsigned int total_num_blocks) : _num_global_blocks(total_num_blocks), _num_equations(NEQ), log_approx(-40, 2, 1e12, 1e5, 15), greens_matrix(total_num_blocks, total_num_blocks)
+ViCaRS::ViCaRS(unsigned int total_num_blocks) : _num_global_blocks(total_num_blocks), log_approx(-40, 2, 1e12, 1e5, 15), greens_matrix(total_num_blocks, total_num_blocks)
 {
     _solver_long = _solver_rupture = _current_solver = NULL;
     _use_slowness_law = true;
     _use_log_spline = false;
     _use_simple_equations = true;
 	_G = 3.0e10;
-    v_ss = 0.01;
-    h_ss = 1/v_ss;
-    v_eq = 0.1;
-    v_min = 1e-9; // values in cvodes vectors cannot be zero, so use this as our 'zero'?
+    //v_ss = 0.01;
+    //h_ss = 1/v_ss;
+    //v_eq = 0.1;
+    //v_min = 1e-9; // values in cvodes vectors cannot be zero, so use this as our 'zero'?
 }
 
 int ViCaRS::add_block(const BlockGID &id, const BlockData &block_data) {
@@ -25,6 +25,10 @@ int ViCaRS::init(void) {
 	realtype		*toldata;
 	BlockGID		gid;
 	BlockMap::const_iterator	it;
+	
+	if (_use_simple_equations) _eqns = new SimpleEqns;
+	else _eqns = new OrigEqns;
+	_num_equations = _eqns->num_equations();
 	
 	flag = fill_greens_matrix();
 	if (flag != 0) return 1;
@@ -47,15 +51,12 @@ int ViCaRS::init(void) {
 		V(gid) = _bdata[gid]._init_v;
 		H(gid) = _bdata[gid]._init_h;
 		
-		toldata[_num_equations*gid+EQ_X] = _bdata[gid]._tol_x;
-		toldata[_num_equations*gid+EQ_V] = _bdata[gid]._tol_v;
-		toldata[_num_equations*gid+EQ_H] = _bdata[gid]._tol_h;
+		toldata[_num_equations*gid+0] = _bdata[gid]._tol_x;
+		toldata[_num_equations*gid+1] = _bdata[gid]._tol_v;
+		toldata[_num_equations*gid+2] = _bdata[gid]._tol_h;
 	}
 	
 	// Init CVodes structures
-	if (_use_simple_equations) _eqns = new SimpleEqns;
-	else _eqns = new OrigEqns;
-	
 	flag = _eqns->init(this);
 	if (flag) return flag;
 	
@@ -105,7 +106,7 @@ int ViCaRS::init_solver(void **created_solver, int rootdir) {
 	
 	// Set the root finding function, going above the rupture limit for long term solver
 	// and going below the limit for rupture solver.
-	flag = CVodeRootInit(solver, 1, check_for_rupture);
+	flag = CVodeRootInit(solver, 1, check_for_mode_change);
 	if (flag != CV_SUCCESS) return 1;
 	flag = CVodeSetRootDirection(solver, &rootdir);
 	if (flag != CV_SUCCESS) return 1;
@@ -214,6 +215,8 @@ int ViCaRS::advance(void) {
 		flag = CVodeReInit(_solver_rupture, _cur_time, _vars);
 		if (flag != CV_SUCCESS) return 1;
 		_in_rupture = !_in_rupture;
+		
+		_eqns->handle_mode_change(this, _cur_time, _vars);
 		
 		return 0;
 	} else return flag;
@@ -367,19 +370,19 @@ int jacobian_times_vector(N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vec
 	return eqns->jacobian_times_vector(sim, v, Jv, t, y, fy, tmp);
 }
 
-int check_for_rupture(realtype t, N_Vector y, realtype *gout, void *user_data) {
+int check_for_mode_change(realtype t, N_Vector y, realtype *gout, void *user_data) {
 	ViCaRS			*sim = static_cast<ViCaRS*>(user_data);
 	EqnSolver		*eqns = sim->get_eqns();
 	
 	// Solve the equations using the specified method and return the resulting error code
-	return eqns->check_for_rupture(sim, t, y, gout);
+	return eqns->check_for_mode_change(sim, t, y, gout);
 }
 
 /*
  * Functions called by the solver for advanced RS
  */
 
-bool EqnSolver::values_valid(ViCaRS *sim, N_Vector y) {
+bool OrigEqns::values_valid(ViCaRS *sim, N_Vector y) {
 	int			local_fail;
 	BlockMap::const_iterator	it;
 	
@@ -403,22 +406,32 @@ int OrigEqns::init(ViCaRS *sim) {
 
 int SimpleEqns::init(ViCaRS *sim) {
 	BlockMap::const_iterator	it,jt;
-	realtype					sigma_i, v_ss, v_star, sum_load, W;
+	realtype					v_ss, sum_load, W, beta, delta_tau;
 	
-	_ss_stress = N_VNew_Serial(sim->num_global_blocks());
-	if (_ss_stress == NULL) return 1;
-	
-	sigma_i = 1;
-	v_ss = 1.0/(1.0e2*365.25*86400);	// 1 cm/year in m/s
-	v_star = 1.0/(1.0e5*365.25*86400);	// 1 meter/1e5 years in m/s
-	W = 1000;
-	
+	// Start all blocks in phase 0
 	for (it=sim->begin();it!=sim->end();++it) {
-		NV_Ith_S(_ss_stress, it->first) = sigma_i*(mu_0+(A-B)*log(v_ss/v_star));
+		phase[it->first] = 0;
 	}
 	
-	_stress_loading = N_VNew_Serial(sim->num_global_blocks());
-	if (_stress_loading == NULL) return 1;
+	mu_0 = 0.5;
+	A = 0.005;
+	B = 0.015;
+	D_c = 0.01*1e-3;
+	sigma_i = 1;
+	_v_star = 1.0/(1.0e5*365.25*86400);	// 1 meter/1e5 years in m/s
+	_theta_star = D_c/_v_star;
+	
+	v_ss = 1.0/(1.0e2*365.25*86400);	// 1 cm/year in m/s
+	W = 1000;
+	
+	beta = 5000;		// meters/second
+	delta_tau = 1000;
+	
+	for (it=sim->begin();it!=sim->end();++it) {
+		_ss_stress[it->first] = sigma_i*(mu_0+(A-B)*log(v_ss/_v_star));
+		_v_eq[it->first] = 2*beta*delta_tau/sim->G();
+		_base_stress[it->first] = _elem_stress[it->first] = 0;
+	}
 	
 	for (it=sim->begin();it!=sim->end();++it) {
 		sum_load = 0;
@@ -426,11 +439,10 @@ int SimpleEqns::init(ViCaRS *sim) {
 			sum_load += v_ss*sim->interaction(it->first, jt->first);
 		}
 		sum_load += v_ss*sim->G()/W;
-		NV_Ith_S(_stress_loading, it->first) = sum_load;
+		_stress_loading[it->first] = sum_load;
 	}
 	
-	std::cerr << NV_Ith_S(_ss_stress, 0) << " " << NV_Ith_S(_stress_loading, 0) << " " << NV_Ith_S(_ss_stress, 0)/NV_Ith_S(_stress_loading, 0) << std::endl;
-	
+	//std::cerr << _ss_stress[0] << " " << _stress_loading[0] << " " << _ss_stress[0]/_stress_loading[0] << std::endl;
 	
 	return 0;
 }
@@ -473,7 +485,7 @@ int OrigEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 
 // Function to determine when the simulation moves into rupture or long term mode
 // TODO: parallelize this function
-int OrigEqns::check_for_rupture(ViCaRS *sim, realtype t, N_Vector y, realtype *gout) {
+int OrigEqns::check_for_mode_change(ViCaRS *sim, realtype t, N_Vector y, realtype *gout) {
 	BlockMap::const_iterator	it;
 	realtype			local_max = -DBL_MAX;
 	
@@ -510,60 +522,96 @@ int OrigEqns::jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realty
 	return 0;
 }
 
+// Simple eqns Jacobian
+// Term		Phase 0		Phase 1		Phase 2
+// dX/dX =	0			0			0
+// dX/dS =	0
+// dX/dH =	0
+// dS/dX = 
 int SimpleEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 	BlockMap::const_iterator	it, j;
 	int             phase_num;
 	BlockGID        gid;
-	realtype        x, v, h, sigma, mu;
+	realtype        x, h, v_0=0.001, tau_dot, H, K;
+	
+	// Calculate velocities and stresses on blocks
+	for (it=sim->begin();it!=sim->end();++it) {
+		gid = it->first;
+		switch (phase[gid]) {
+			case 0:
+				_vel[gid] = 0;
+				_elem_stress[gid] = _base_stress[gid] + (t-_start_time[gid])*_stress_loading[gid];
+				break;
+			case 1:
+				K = -sim->interaction(gid, gid)+1;	// K_T = 1 arbitrarily, need to change this
+				H = B/D_c-K/sigma_i;
+				tau_dot = _stress_loading[gid];
+				_vel[gid] = 1.0/((1.0/v_0+H*sigma_i/tau_dot)*exp(-tau_dot*(t-_start_time[gid])/(A*sigma_i)) - H*sigma_i/tau_dot);
+				_elem_stress[gid] = sigma_i*(mu_0+A*log(_vel[gid]/_v_star)+B*log(Hth(y,gid)/_theta_star));
+				break;
+			case 2:
+				_vel[gid] = _v_eq[gid];
+				_elem_stress[gid] = sigma_i*(mu_0+A*log(_vel[gid]/_v_star)+B*log(Hth(y,gid)/_theta_star));
+				break;
+		}
+	}
 	
 	for (it=sim->begin();it!=sim->end();++it) {
 		gid = it->first;
 		
 		phase_num = phase[gid];
+		
 		x = Xth(y,gid);
-		v = Vth(y,gid);
 		h = Hth(y,gid);
 		
-		/*for (it=sim->begin();it!=sim->end();++it) {
-		 mu = 1;
-		 sigma = 1;
-		 NV_Ith_P(sim->_stress,lid) = sigma*(mu
-		 +(phase != 0 ? sim->param_a(gid)*log(v) : 0)
-		 +sim->param_b(gid)*log(h));
-		 }*/
-		
-		Xth(ydot,gid) = v;
-		
 		if (phase_num == 0) {
-			Vth(ydot,gid) = 0;
 			Hth(ydot,gid) = 1;
 		} else if (phase_num == 1) {
-			Vth(ydot,gid) = t-x-sim->param_k(gid)*sim->F(gid, v, h);
-			Hth(ydot,gid) = 1.0-h*v;
+			Hth(ydot,gid) = 1.0-h*_vel[gid]/D_c;
 		} else if (phase_num == 2) {
-			Vth(ydot,gid) = 0;
-			Hth(ydot,gid) = 1.0-h*v;
+			Hth(ydot,gid) = 1.0-h*_vel[gid]/D_c;
 		} else return -1;
+		
+		Xth(ydot,gid) = _vel[gid];
 	}
 	
 	return 0;
 }
 
 // Function to determine when the simulation moves into rupture or long term mode
-int SimpleEqns::check_for_rupture(ViCaRS *sim, realtype t, N_Vector y, realtype *gout) {
+int SimpleEqns::check_for_mode_change(ViCaRS *sim, realtype t, N_Vector y, realtype *gout) {
 	BlockMap::const_iterator it;
-	int phase_num;
+	realtype	max_val;
+	BlockGID gid;
+	
+	max_val = -DBL_MAX;
+	for (it=sim->begin();it!=sim->end();++it) {
+		gid = it->first;
+		
+		if (phase[gid] == 0) max_val = fmax(max_val, _elem_stress[gid] - _ss_stress[gid]);
+		else if (phase[gid] == 1) max_val = fmax(max_val, _vel[gid] - _v_eq[gid]);
+		else if (phase[gid] == 2) max_val = fmax(max_val, _ss_stress[gid] - _elem_stress[gid]);
+		else return 1;
+	}
+	
+	gout[0] = max_val;
+	
+	return 0;
+}
+
+void OrigEqns::handle_mode_change(ViCaRS *sim, realtype t, N_Vector y) {
+}
+
+void SimpleEqns::handle_mode_change(ViCaRS *sim, realtype t, N_Vector y) {
+	BlockMap::const_iterator it;
 	BlockGID gid;
 	
 	for (it=sim->begin();it!=sim->end();++it) {
 		gid = it->first;
 		
-		phase_num = phase[gid];
-		if (phase_num == 0) gout[gid] = Hth(y,gid) - sim->h_ss;
-		else if (phase_num == 1) gout[gid] = Vth(y,gid) - sim->v_eq;
-		else if (phase_num == 2) gout[gid] = sim->h_ss - Hth(y,gid);
-		else return 1;
+		if (phase[gid] == 0 && _elem_stress[gid] >= _ss_stress[gid]) phase[gid] = 1;
+		else if (phase[gid] == 1 && _vel[gid] >= _v_eq[gid]) phase[gid] = 2;
+		else if (phase[gid] == 2 && _ss_stress[gid] >= _elem_stress[gid]) phase[gid] = 0;
 	}
-	
-	return 0;
 }
+
