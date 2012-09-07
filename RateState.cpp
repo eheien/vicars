@@ -55,6 +55,9 @@ int ViCaRS::init(void) {
 	if (_use_simple_equations) _eqns = new SimpleEqns;
 	else _eqns = new OrigEqns;
 	
+	flag = _eqns->init(this);
+	if (flag) return flag;
+	
 	_cur_time = 0;
 	
 	// Initialize the long term solver
@@ -391,6 +394,20 @@ bool EqnSolver::values_valid(ViCaRS *sim, N_Vector y) {
 	}
 	
 	return (!local_fail);
+}
+
+int OrigEqns::init(ViCaRS *sim) {
+	return 0;
+}
+
+int SimpleEqns::init(ViCaRS *sim) {
+	_ss_stress = N_VNew_Serial(sim->num_global_blocks());
+	if (_ss_stress == NULL) return 1;
+	
+	_stress_loading = N_VNew_Serial(sim->num_global_blocks());
+	if (_stress_loading == NULL) return 1;
+	
+	return 0;
 }
 
 int OrigEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {

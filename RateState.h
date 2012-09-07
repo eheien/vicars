@@ -54,6 +54,9 @@ class ViCaRS;
 
 class EqnSolver {
 public:
+	virtual ~EqnSolver(void) {};
+	virtual int init(ViCaRS *sim) = 0;
+	
 	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) = 0;
 	virtual bool has_jacobian(void) = 0;
 	virtual int jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp) = 0;
@@ -63,6 +66,9 @@ public:
 
 class OrigEqns : public EqnSolver {
 public:
+	virtual ~OrigEqns(void) {};
+	virtual int init(ViCaRS *sim);
+	
 	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot);
 	virtual bool has_jacobian(void) { return true; };
 	virtual int jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp);
@@ -74,7 +80,13 @@ private:
 	// Phase of each element
 	std::map<BlockGID, int> phase;
 	
+	N_Vector		_ss_stress, _stress_loading;
+	
 public:
+	SimpleEqns(void) : _ss_stress(NULL), _stress_loading(NULL) {};
+	virtual ~SimpleEqns(void) { if (_ss_stress) N_VDestroy_Serial(_ss_stress); if (_stress_loading) N_VDestroy_Serial(_stress_loading); };
+	virtual int init(ViCaRS *sim);
+	
 	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot);
 	virtual bool has_jacobian(void) { return false; };
 	virtual int jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp) { return -1; };
