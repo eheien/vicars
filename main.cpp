@@ -11,17 +11,16 @@ int main(int argc, char **argv)
 	int				res;
 	
 	realtype		x_0, v_0, h_0, x_err, v_err, h_err;
-	double			side, A, G, v_p, mu_0, m, k, tau, g, L, rho, a, b;
+	double			side, A, v_p, mu_0, m, k, tau, g, L, rho, a, b;
 	
 	side = 10*1000;					// meters
 	//side = 1;					// meters
 	A = pow(side, 2);				// meters^2, aka 10km^2
-	G = 3.0e10;						// Pascals
 	v_p = 5.0/(100*365.25*86400);	// meters/sec, aka 5 cm/year
 	mu_0 = 0.05;					// sliding coefficient of friction
 	rho = 2.5e3;					// kg/m^3
 	m = rho*pow(side, 3);			// kg
-	k = G*sqrt(A)/2;				// spring constant, N/m
+	k = sim.G()*sqrt(A)/2;				// spring constant, N/m
 	tau = 2*M_PI*sqrt(m/k);			// natural period of vibration
 	g = 9.8;						// meters/sec^2
 	L = 1;							// meters

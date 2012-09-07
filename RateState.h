@@ -80,10 +80,12 @@ private:
 	// Phase of each element
 	std::map<BlockGID, int> phase;
 	
+	realtype		mu_0, A, B;
+	
 	N_Vector		_ss_stress, _stress_loading;
 	
 public:
-	SimpleEqns(void) : _ss_stress(NULL), _stress_loading(NULL) {};
+	SimpleEqns(void) : mu_0(0.5), A(0.005), B(0.015), _ss_stress(NULL), _stress_loading(NULL) {};
 	virtual ~SimpleEqns(void) { if (_ss_stress) N_VDestroy_Serial(_ss_stress); if (_stress_loading) N_VDestroy_Serial(_stress_loading); };
 	virtual int init(ViCaRS *sim);
 	
@@ -120,6 +122,8 @@ private:
 	N_Vector				_vars;
 	
 	BlockMap				_bdata;
+	
+	realtype				_G;		// shear modulus parameter
 	
 	realtype				_rel_tol;
 	realtype				_cur_time;
@@ -181,6 +185,8 @@ public:
 	void cleanup(void);
 	
 	EqnSolver *get_eqns(void) { return _eqns; };
+	
+	realtype G(void) const { return _G; };
 	
 	realtype interaction(BlockGID a, BlockGID b);
 	void set_timesteps(realtype long_term_step, realtype rupture_step) { _long_timestep = long_term_step; _rupture_timestep = rupture_step; };

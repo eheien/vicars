@@ -5,7 +5,8 @@ ViCaRS::ViCaRS(unsigned int total_num_blocks) : _num_global_blocks(total_num_blo
     _solver_long = _solver_rupture = _current_solver = NULL;
     _use_slowness_law = true;
     _use_log_spline = false;
-    _use_simple_equations = false;
+    _use_simple_equations = true;
+	_G = 3.0e10;
     v_ss = 0.01;
     h_ss = 1/v_ss;
     v_eq = 0.1;
@@ -401,11 +402,35 @@ int OrigEqns::init(ViCaRS *sim) {
 }
 
 int SimpleEqns::init(ViCaRS *sim) {
+	BlockMap::const_iterator	it,jt;
+	realtype					sigma_i, v_ss, v_star, sum_load, W;
+	
 	_ss_stress = N_VNew_Serial(sim->num_global_blocks());
 	if (_ss_stress == NULL) return 1;
 	
+	sigma_i = 1;
+	v_ss = 1.0/(1.0e2*365.25*86400);	// 1 cm/year in m/s
+	v_star = 1.0/(1.0e5*365.25*86400);	// 1 meter/1e5 years in m/s
+	W = 1000;
+	
+	for (it=sim->begin();it!=sim->end();++it) {
+		NV_Ith_S(_ss_stress, it->first) = sigma_i*(mu_0+(A-B)*log(v_ss/v_star));
+	}
+	
 	_stress_loading = N_VNew_Serial(sim->num_global_blocks());
 	if (_stress_loading == NULL) return 1;
+	
+	for (it=sim->begin();it!=sim->end();++it) {
+		sum_load = 0;
+		for (jt=sim->begin();jt!=sim->end();++jt) {
+			sum_load += v_ss*sim->interaction(it->first, jt->first);
+		}
+		sum_load += v_ss*sim->G()/W;
+		NV_Ith_S(_stress_loading, it->first) = sum_load;
+	}
+	
+	std::cerr << NV_Ith_S(_ss_stress, 0) << " " << NV_Ith_S(_stress_loading, 0) << " " << NV_Ith_S(_ss_stress, 0)/NV_Ith_S(_stress_loading, 0) << std::endl;
+	
 	
 	return 0;
 }
