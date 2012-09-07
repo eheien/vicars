@@ -8,12 +8,10 @@ int main(int argc, char **argv)
 	unsigned int	i;
 	double			param_a, param_b, param_k, param_r;
 	FILE			*fp;
-	int				res, world_size, rank;
+	int				res;
 	
 	realtype		x_0, v_0, h_0, x_err, v_err, h_err;
 	double			side, A, G, v_p, mu_0, m, k, tau, g, L, rho, a, b;
-	
-	MPI_Init(&argc, &argv);
 	
 	side = 10*1000;					// meters
 	//side = 1;					// meters
@@ -40,16 +38,13 @@ int main(int argc, char **argv)
 	param_k = 20;
 	param_r = 1e-5;
 	
-	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	
 	for (i=0;i<NBLOCKS;++i) {
         x_err = v_err = h_err = RCONST(1e-6);
         x_0 = -14.5 + i;
         h_0 = 1;
         v_0 = 1;
-		BlockData	bdata(i, param_a, param_b, param_k, param_r, x_0, v_0, h_0, x_err, v_err, h_err);
-		sim.add_local_block(bdata);
+		BlockData	bdata(param_a, param_b, param_k, param_r, x_0, v_0, h_0, x_err, v_err, h_err);
+		sim.add_block(i, bdata);
 	}
 	
 	// Set the threshold for a rupture to be 0.1 m/s
@@ -86,6 +81,4 @@ int main(int argc, char **argv)
 	sim.print_stats();
 	
 	sim.cleanup();
-	
-	MPI_Finalize();
 }

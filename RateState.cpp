@@ -12,53 +12,43 @@ ViCaRS::ViCaRS(unsigned int total_num_blocks) : _num_global_blocks(total_num_blo
     v_min = 1e-9; // values in cvodes vectors cannot be zero, so use this as our 'zero'?
 }
 
-int ViCaRS::add_local_block(const BlockData &block_data) {
-	BlockGID		gid;
-	
-	gid = block_data._gid;
-	
-	if (gid >= _num_global_blocks) return -1;
-	
-	if (_global_local_map.count(gid) > 0) {
-		_bdata.at(_global_local_map[gid]) = block_data;
-	} else {
-		_global_local_map[gid] = (unsigned int)_bdata.size();
-		_bdata.push_back(block_data);
-	}
+int ViCaRS::add_block(const BlockGID &id, const BlockData &block_data) {
+	_bdata[id] = block_data;
 	
 	return 0;
 }
 
 int ViCaRS::init(void) {
-	unsigned int	num_local, lid;
+	unsigned int	num_local;
 	int				flag, rootdir;
 	realtype		*toldata;
-	GlobalLocalMap::const_iterator	it;
+	BlockGID		gid;
+	BlockMap::const_iterator	it;
 	
 	flag = fill_greens_matrix();
 	if (flag != 0) return 1;
 	
-	num_local = (unsigned int)_global_local_map.size();
-	_vars = N_VNew_Parallel(MPI_COMM_WORLD, num_local*_num_equations, _num_global_blocks*_num_equations);
+	num_local = (unsigned int)_bdata.size();
+	_vars = N_VNew_Serial(_num_global_blocks*_num_equations);
 	if (_vars == NULL) return 1;
-	_stress = N_VNew_Parallel(MPI_COMM_WORLD, num_local, _num_global_blocks);
+	_stress = N_VNew_Serial(_num_global_blocks);
 	if (_stress == NULL) return 1;
-	_abs_tol = N_VNew_Parallel(MPI_COMM_WORLD, num_local*_num_equations, _num_global_blocks*_num_equations);
+	_abs_tol = N_VNew_Serial(_num_global_blocks*_num_equations);
 	if (_abs_tol == NULL) return 1;
 	
 	// Initialize variables and tolerances
 	_rel_tol = RCONST(1.0e-7);
-	toldata = NV_DATA_P(_abs_tol);
+	toldata = NV_DATA_S(_abs_tol);
 	
-	for (it=_global_local_map.begin();it!=_global_local_map.end();++it) {
-		lid = it->second;
-		X(it->first) = _bdata[lid]._init_x;
-		V(it->first) = _bdata[lid]._init_v;
-		H(it->first) = _bdata[lid]._init_h;
+	for (it=_bdata.begin();it!=_bdata.end();++it) {
+		gid = it->first;
+		X(gid) = _bdata[gid]._init_x;
+		V(gid) = _bdata[gid]._init_v;
+		H(gid) = _bdata[gid]._init_h;
 		
-		toldata[_num_equations*lid+EQ_X] = _bdata[lid]._tol_x;
-		toldata[_num_equations*lid+EQ_V] = _bdata[lid]._tol_v;
-		toldata[_num_equations*lid+EQ_H] = _bdata[lid]._tol_h;
+		toldata[_num_equations*gid+EQ_X] = _bdata[gid]._tol_x;
+		toldata[_num_equations*gid+EQ_V] = _bdata[gid]._tol_v;
+		toldata[_num_equations*gid+EQ_H] = _bdata[gid]._tol_h;
 	}
 	
 	// Init CVodes structures
@@ -227,9 +217,9 @@ int ViCaRS::advance(void) {
 
 void ViCaRS::cleanup(void) {
 	// Free y and abstol vectors
-	N_VDestroy_Parallel(_vars);
-	N_VDestroy_Parallel(_stress);
-	N_VDestroy_Parallel(_abs_tol);
+	N_VDestroy_Serial(_vars);
+	N_VDestroy_Serial(_stress);
+	N_VDestroy_Serial(_abs_tol);
 	
 	// Free integrator memory
 	CVodeFree(&_solver_long);
@@ -242,21 +232,15 @@ void ViCaRS::cleanup(void) {
 realtype ViCaRS::interaction(BlockGID i, BlockGID j) { return greens_matrix.val(i,j); };
 
 void ViCaRS::write_header(FILE *fp) {
-	GlobalLocalMap::const_iterator	it;
+	BlockMap::const_iterator	it;
 	BlockGID		gid;
-	int world_size, rank;
 	
-	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	
-	if (rank == 0) {
-		fprintf(fp, "t S ");
-		for (it=_global_local_map.begin();it!=_global_local_map.end();++it) {
-			gid = it->first;
-			fprintf(fp, "x%d v%d h%d F%d ", gid, gid, gid, gid);
-		}
-		fprintf(fp, "\n");
+	fprintf(fp, "t S ");
+	for (it=_bdata.begin();it!=_bdata.end();++it) {
+		gid = it->first;
+		fprintf(fp, "x%d v%d h%d F%d ", gid, gid, gid, gid);
 	}
+	fprintf(fp, "\n");
 }
 
 void ViCaRS::write_summary_header(FILE *fp) {
@@ -266,7 +250,7 @@ void ViCaRS::write_summary_header(FILE *fp) {
 void ViCaRS::write_summary(FILE *fp) {
 	realtype		v, min_v, max_v;
 	BlockGID		min_v_gid, max_v_gid;
-	GlobalLocalMap::const_iterator	it;
+	BlockMap::const_iterator	it;
 	
 	min_v = DBL_MAX;
 	max_v = -DBL_MAX;
@@ -287,10 +271,10 @@ void ViCaRS::write_summary(FILE *fp) {
 
 void ViCaRS::write_cur_data(FILE *fp) {
 	realtype			xi, vi, hi;
-	GlobalLocalMap::const_iterator	it;
+	BlockMap::const_iterator	it;
 	
 	fprintf(fp, "%0.7e %d ", _cur_time, _in_rupture);
-	for (it=_global_local_map.begin();it!=_global_local_map.end();++it) {
+	for (it=_bdata.begin();it!=_bdata.end();++it) {
 		xi = X(it->first);
 		vi = V(it->first);
 		hi = H(it->first);
@@ -339,15 +323,15 @@ void ViCaRS::print_stats(void) {
 
 int ViCaRS::fill_greens_matrix(void) {
 	int i, j, r;
-	GlobalLocalMap::const_iterator	it, jt;
+	BlockMap::const_iterator	it, jt;
 	
 	double G = 3e10;
 	double L = 0.1;
 	double scale = 1e-9;
 	
-	for (it=_global_local_map.begin(); it != _global_local_map.end(); ++it) {
+	for (it=_bdata.begin(); it != _bdata.end(); ++it) {
 		i = it->first;
-		for (jt=_global_local_map.begin(); jt != _global_local_map.end(); ++jt) {
+		for (jt=_bdata.begin(); jt != _bdata.end(); ++jt) {
 			j = jt->first;
 			if (i==j) { greens_matrix.setVal(i,j,scale*-0.53*G/L); }
 			else {
@@ -392,58 +376,54 @@ int check_for_rupture(realtype t, N_Vector y, realtype *gout, void *user_data) {
  */
 
 bool EqnSolver::values_valid(ViCaRS *sim, N_Vector y) {
-	int			local_fail, global_fail, err;
-	GlobalLocalMap::const_iterator	it;
+	int			local_fail;
+	BlockMap::const_iterator	it;
 	
 	if (sim->use_log_spline()) return true;
 	
 	// Check if any velocity or theta values are below 0
 	local_fail = 0;
 	for (it=sim->begin();it!=sim->end();++it) {
-		if (Vth(y,it->second) <= 0 || Hth(y,it->second) <= 0) {
+		if (Vth(y,it->first) <= 0 || Hth(y,it->first) <= 0) {
 			local_fail = 1;
 			break;
 		}
 	}
 	
-	// Communicate with other processes to indicate whether or not to continue
-	// TODO: error check
-	err = MPI_Allreduce(&local_fail, &global_fail, 1, MPI_INT, MPI_LOR, MPI_COMM_WORLD);
-	return (!global_fail);
+	return (!local_fail);
 }
 
 int OrigEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 	realtype		friction_force, spring_force, x, v, h, interact;
-	unsigned int	i_lid, j_lid, i_gid;
-	GlobalLocalMap::const_iterator	it,jt;
+	unsigned int	i_gid, j_gid;
+	BlockMap::const_iterator	it,jt;
 	
 	// Share X values over all processors to enable correct interaction between blocks
 	// TODO: only share X values with processors that need them
 	
 	for (it=sim->begin();it!=sim->end();++it) {
 		i_gid = it->first;
-		i_lid = it->second;
-		x = Xth(y,i_lid);
-		v = Vth(y,i_lid);
-		h = Hth(y,i_lid);
+		x = Xth(y,i_gid);
+		v = Vth(y,i_gid);
+		h = Hth(y,i_gid);
 		
 		friction_force = sim->param_k(i_gid)*sim->F(i_gid,v,h);
 		
 		// calculate interaction force
 		spring_force = 0;
 		for (jt=sim->begin();jt!=sim->end();++jt) {
-			j_lid = jt->second;
-			interact = sim->interaction(i_lid,j_lid);
+			j_gid = jt->first;
+			interact = sim->interaction(i_gid,j_gid);
 			if (interact > 0) {
-				spring_force += interact*(x-Xth(y,j_lid));
+				spring_force += interact*(x-Xth(y,j_gid));
 			}
 		}
 		spring_force = 0;
 		
-		Xth(ydot,i_lid) = v;
-		Vth(ydot,i_lid) = (t-x-friction_force-spring_force)/sim->param_r(i_gid);
-        if (sim->use_slowness_law()) Hth(ydot,i_lid) = RCONST(1) - h*v;
-        else Hth(ydot,i_lid) = -h*v*sim->log_func(h*v);
+		Xth(ydot,i_gid) = v;
+		Vth(ydot,i_gid) = (t-x-friction_force-spring_force)/sim->param_r(i_gid);
+        if (sim->use_slowness_law()) Hth(ydot,i_gid) = RCONST(1) - h*v;
+        else Hth(ydot,i_gid) = -h*v*sim->log_func(h*v);
 	}
 	
 	return 0;
@@ -452,62 +432,55 @@ int OrigEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 // Function to determine when the simulation moves into rupture or long term mode
 // TODO: parallelize this function
 int OrigEqns::check_for_rupture(ViCaRS *sim, realtype t, N_Vector y, realtype *gout) {
-	GlobalLocalMap::const_iterator	it;
-	double			local_max = -DBL_MAX;
-	realtype		local_gout;
+	BlockMap::const_iterator	it;
+	realtype			local_max = -DBL_MAX;
 	
-	for (it=sim->begin();it!=sim->end();++it) local_max = fmax(local_max, Vth(y,it->second));
+	for (it=sim->begin();it!=sim->end();++it) local_max = fmax(local_max, Vth(y,it->first));
 	
-	local_gout = local_max - sim->rupture_threshold();
-	
-	MPI_Allreduce(&local_gout, gout, 1, PVEC_REAL_MPI_TYPE, MPI_MIN, MPI_COMM_WORLD);
+	gout[0] = local_max - sim->rupture_threshold();
 	
 	return 0;
 }
 
 // Computes Jv = Jacobian times v in order to improve convergence for Krylov subspace solver
 int OrigEqns::jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp) {
-	GlobalLocalMap::const_iterator	it;
-	unsigned int	lid, gid;
+	BlockMap::const_iterator	it;
+	BlockGID	gid;
 	
 	for (it=sim->begin();it!=sim->end();++it) {
 		gid = it->first;
-		lid = it->second;
-		Xth(Jv,lid) =	1 * Vth(v,lid);
-		Vth(Jv,lid) =	(-RCONST(1)/sim->param_r(gid)) * Xth(v,lid)
-		+ -(sim->param_k(gid)*sim->param_a(gid)*sim->log_deriv((Vth(y,lid)))/(sim->param_r(gid))) * Vth(v,lid)
-		+ -(sim->param_k(gid)*sim->param_b(gid)/(sim->param_r(gid)*Hth(y,lid))) * Hth(v,lid);
+		Xth(Jv,gid) =	1 * Vth(v,gid);
+		Vth(Jv,gid) =	(-RCONST(1)/sim->param_r(gid)) * Xth(v,gid)
+		+ -(sim->param_k(gid)*sim->param_a(gid)*sim->log_deriv((Vth(y,gid)))/(sim->param_r(gid))) * Vth(v,gid)
+		+ -(sim->param_k(gid)*sim->param_b(gid)/(sim->param_r(gid)*Hth(y,gid))) * Hth(v,gid);
         
         if (sim->use_slowness_law()) {
-            Hth(Jv,lid) =	-Hth(y,lid) * Vth(v,lid)
-			+ -Vth(y,lid) * Hth(v,lid);
+            Hth(Jv,gid) =	-Hth(y,gid) * Vth(v,gid)
+			+ -Vth(y,gid) * Hth(v,gid);
         } else {
-            Hth(Jv,lid) = -Hth(y,lid)*(sim->log_func(Hth(y,lid)*Vth(y,lid))
-									   + Hth(y,lid)*Vth(y,lid) * sim->log_deriv(Hth(y,lid)*Vth(y,lid))) * Vth(v,lid)
-			- Vth(y,lid)*(sim->log_func(Hth(y,lid)*Vth(y,lid))
-						  + Hth(y,lid)*Vth(y,lid)*sim->log_deriv(Hth(y,lid)*Vth(y,lid))) * Hth(v,lid);
+            Hth(Jv,gid) = -Hth(y,gid)*(sim->log_func(Hth(y,gid)*Vth(y,gid))
+									   + Hth(y,gid)*Vth(y,gid) * sim->log_deriv(Hth(y,gid)*Vth(y,gid))) * Vth(v,gid)
+			- Vth(y,gid)*(sim->log_func(Hth(y,gid)*Vth(y,gid))
+						  + Hth(y,gid)*Vth(y,gid)*sim->log_deriv(Hth(y,gid)*Vth(y,gid))) * Hth(v,gid);
         }
-		//std::cerr << lid << " " << gid << " " << Xth(Jv,lid) << " " << Vth(Jv,lid) << " " << Hth(Jv,lid) << std::endl;
 	}
 	
 	return 0;
 }
 
 int SimpleEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
-	GlobalLocalMap::const_iterator	it, j;
-	unsigned int	  lid;
+	BlockMap::const_iterator	it, j;
 	int             phase_num;
 	BlockGID        gid;
 	realtype        x, v, h, sigma, mu;
 	
 	for (it=sim->begin();it!=sim->end();++it) {
 		gid = it->first;
-		lid = it->second;
 		
 		phase_num = phase[gid];
-		x = Xth(y,lid);
-		v = Vth(y,lid);
-		h = Hth(y,lid);
+		x = Xth(y,gid);
+		v = Vth(y,gid);
+		h = Hth(y,gid);
 		
 		/*for (it=sim->begin();it!=sim->end();++it) {
 		 mu = 1;
@@ -517,17 +490,17 @@ int SimpleEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 		 +sim->param_b(gid)*log(h));
 		 }*/
 		
-		Xth(ydot,lid) = v;
+		Xth(ydot,gid) = v;
 		
 		if (phase_num == 0) {
-			Vth(ydot,lid) = 0;
-			Hth(ydot,lid) = 1;
+			Vth(ydot,gid) = 0;
+			Hth(ydot,gid) = 1;
 		} else if (phase_num == 1) {
-			Vth(ydot,lid) = t-x-sim->param_k(gid)*sim->F(gid, v, h);
-			Hth(ydot,lid) = 1.0-h*v;
+			Vth(ydot,gid) = t-x-sim->param_k(gid)*sim->F(gid, v, h);
+			Hth(ydot,gid) = 1.0-h*v;
 		} else if (phase_num == 2) {
-			Vth(ydot,lid) = 0;
-			Hth(ydot,lid) = 1.0-h*v;
+			Vth(ydot,gid) = 0;
+			Hth(ydot,gid) = 1.0-h*v;
 		} else return -1;
 	}
 	
@@ -536,19 +509,17 @@ int SimpleEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 
 // Function to determine when the simulation moves into rupture or long term mode
 int SimpleEqns::check_for_rupture(ViCaRS *sim, realtype t, N_Vector y, realtype *gout) {
-	GlobalLocalMap::const_iterator it;
+	BlockMap::const_iterator it;
 	int phase_num;
-	unsigned int lid;
 	BlockGID gid;
 	
 	for (it=sim->begin();it!=sim->end();++it) {
 		gid = it->first;
-		lid = it->second;
 		
 		phase_num = phase[gid];
-		if (phase_num == 0) gout[gid] = Hth(y,lid) - sim->h_ss;
-		else if (phase_num == 1) gout[gid] = Vth(y,lid) - sim->v_eq;
-		else if (phase_num == 2) gout[gid] = sim->h_ss - Hth(y,lid);
+		if (phase_num == 0) gout[gid] = Hth(y,gid) - sim->h_ss;
+		else if (phase_num == 1) gout[gid] = Vth(y,gid) - sim->v_eq;
+		else if (phase_num == 2) gout[gid] = sim->h_ss - Hth(y,gid);
 		else return 1;
 	}
 	

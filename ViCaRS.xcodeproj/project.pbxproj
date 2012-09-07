@@ -192,7 +192,7 @@
 		AA1DA1F51545E1DE0082AF78 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = "/opt/local/include/openmpi/**";
+				HEADER_SEARCH_PATHS = "";
 				LIBRARY_SEARCH_PATHS = "/opt/local/lib/**";
 				OTHER_CFLAGS = (
 					"-I/usr/local/include/",
@@ -200,10 +200,8 @@
 				);
 				OTHER_LDFLAGS = (
 					"-L/usr/local/lib/",
-					"-lmpi",
-					"-lmpi_cxx",
 					"-lsundials_cvode",
-					"-lsundials_nvecparallel",
+					"-lsundials_nvecserial",
 					"-lgsl",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -214,7 +212,7 @@
 		AA1DA1F61545E1DE0082AF78 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = "/opt/local/include/openmpi/**";
+				HEADER_SEARCH_PATHS = "";
 				LIBRARY_SEARCH_PATHS = "/opt/local/lib/**";
 				OTHER_CFLAGS = (
 					"-I/usr/local/include/",
@@ -222,10 +220,8 @@
 				);
 				OTHER_LDFLAGS = (
 					"-L/usr/local/lib/",
-					"-lmpi",
-					"-lmpi_cxx",
 					"-lsundials_cvode",
-					"-lsundials_nvecparallel",
+					"-lsundials_nvecserial",
 					"-lgsl",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";

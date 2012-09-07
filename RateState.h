@@ -1,15 +1,13 @@
 #include <stdio.h>
 #include <math.h>
 #include <vector>
+#include <map>
 #include <iostream>
 #include "Matrix.h"
 #include "Spline.h"
 
-#include <mpi.h>
-
 #include <cvode/cvode.h>             /* prototypes for CVODE fcts., consts. */
 #include <nvector/nvector_serial.h>
-#include <nvector/nvector_parallel.h>
 #include <cvode/cvode_dense.h>       /* prototype for CVDense */
 #include <sundials/sundials_dense.h> /* definitions DlsMat DENSE_ELEM */
 #include <sundials/sundials_types.h> /* definition of type realtype */
@@ -18,9 +16,9 @@
 
 // Format of result vector: [x0, v0, h0, x1, v1, h1, ..., xn, vn, hn]
 
-#define Xth(y,block)	NV_Ith_P(y,block*NEQ+0)
-#define Vth(y,block)	NV_Ith_P(y,block*NEQ+1)
-#define Hth(y,block)	NV_Ith_P(y,block*NEQ+2)
+#define Xth(y,block)	NV_Ith_S(y,block*NEQ+0)
+#define Vth(y,block)	NV_Ith_S(y,block*NEQ+1)
+#define Hth(y,block)	NV_Ith_S(y,block*NEQ+2)
 
 /* Problem Constants */
 
@@ -35,22 +33,22 @@ int check_for_rupture(realtype t, N_Vector y, realtype *gout, void *user_data);
 
 typedef unsigned int BlockGID;
 
-typedef std::map<BlockGID, unsigned int> GlobalLocalMap;
-
 class BlockData {
 public:
-	BlockGID	_gid;
 	realtype	_a, _b, _k, _r;
 	realtype	_init_x, _init_v, _init_h;
 	realtype	_tol_x, _tol_v, _tol_h;
 	
-	BlockData(BlockGID gid, realtype a, realtype b, realtype k, realtype r,
+	BlockData(void) : _a(0), _b(0), _k(0), _r(0), _init_x(0), _init_v(0), _init_h(0), _tol_x(0), _tol_v(0), _tol_h(0) {};
+	BlockData(realtype a, realtype b, realtype k, realtype r,
 			  realtype init_x, realtype init_v, realtype init_h,
 			  realtype tol_x, realtype tol_v, realtype tol_h) :
-	_gid(gid), _a(a), _b(b), _k(k), _r(r),
+	_a(a), _b(b), _k(k), _r(r),
 	_init_x(init_x), _init_v(init_v), _init_h(init_h),
 	_tol_x(tol_x), _tol_v(tol_v), _tol_h(tol_h) {};
 };
+
+typedef std::map<BlockGID, BlockData> BlockMap;
 
 class ViCaRS;
 
@@ -103,14 +101,13 @@ class ViCaRS {
 private:
 	unsigned int			_num_global_blocks;
 	unsigned int			_num_equations;
-	GlobalLocalMap			_global_local_map;
 	
 	// Vector of initial values, absolute tolerances, and calculated values arranged as follows:
 	// [Block1 X, Block1 V, Block1 H, Block2 X, Block2 X, Block2 H, ...]
 	N_Vector				_abs_tol;
 	N_Vector				_vars;
 	
-	std::vector<BlockData>	_bdata;
+	BlockMap				_bdata;
 	
 	realtype				_rel_tol;
 	realtype				_cur_time;
@@ -120,9 +117,6 @@ private:
 	
 	// Pointer to the currently active solver
 	void					*_current_solver;
-	
-	// Communication related variables
-	int						world_size, rank;
 	
 	realtype                _rupture_timestep, _long_timestep;
 	
@@ -155,19 +149,18 @@ public:
 	N_Vector _stress;
 	realtype h_ss, v_ss, v_eq, v_min;
 	
-	typedef GlobalLocalMap::iterator iterator;
-	typedef GlobalLocalMap::const_iterator const_iterator;
+	typedef BlockMap::iterator iterator;
+	typedef BlockMap::const_iterator const_iterator;
 	
 	ViCaRS(unsigned int total_num_blocks);
 	~ViCaRS(void) {};
 	
-	const_iterator begin(void) const { return _global_local_map.begin(); };
-	iterator begin(void) { return _global_local_map.begin(); };
-	const_iterator end(void) const { return _global_local_map.end(); };
-	iterator end(void) { return _global_local_map.end(); };
+	const_iterator begin(void) const { return _bdata.begin(); };
+	iterator begin(void) { return _bdata.begin(); };
+	const_iterator end(void) const { return _bdata.end(); };
+	iterator end(void) { return _bdata.end(); };
 	
-	int add_local_block(const BlockData &block_data);
-	unsigned int global_to_local(const BlockGID &gid) { return _global_local_map[gid]; };
+	int add_block(const BlockGID &id, const BlockData &block_data);
 	
 	int init(void);
 	int init_solver(void **solver, int rootdir);
@@ -191,14 +184,14 @@ public:
 	unsigned int num_global_blocks(void) const { return _num_global_blocks; };
 	unsigned int num_eqs(void) const { return _num_equations; };
 	
-	realtype &param_a(BlockGID block_num) { unsigned int lid=_global_local_map[block_num]; return _bdata[lid]._a; };
-	realtype &param_b(BlockGID block_num) { unsigned int lid=_global_local_map[block_num]; return _bdata[lid]._b; };
-	realtype &param_k(BlockGID block_num) { unsigned int lid=_global_local_map[block_num]; return _bdata[lid]._k; };
-	realtype &param_r(BlockGID block_num) { unsigned int lid=_global_local_map[block_num]; return _bdata[lid]._r; };
+	realtype &param_a(BlockGID block_num) { return _bdata[block_num]._a; };
+	realtype &param_b(BlockGID block_num) { return _bdata[block_num]._b; };
+	realtype &param_k(BlockGID block_num) { return _bdata[block_num]._k; };
+	realtype &param_r(BlockGID block_num) { return _bdata[block_num]._r; };
 	
-	realtype &X(BlockGID block_num) { unsigned int lid=_global_local_map[block_num]; return NV_DATA_P(_vars)[lid*_num_equations+0]; };
-	realtype &V(BlockGID block_num) { unsigned int lid=_global_local_map[block_num]; return NV_DATA_P(_vars)[lid*_num_equations+1]; };
-	realtype &H(BlockGID block_num) { unsigned int lid=_global_local_map[block_num]; return NV_DATA_P(_vars)[lid*_num_equations+2]; };
+	realtype &X(BlockGID block_num) { return NV_DATA_S(_vars)[block_num*_num_equations+0]; };
+	realtype &V(BlockGID block_num) { return NV_DATA_S(_vars)[block_num*_num_equations+1]; };
+	realtype &H(BlockGID block_num) { return NV_DATA_S(_vars)[block_num*_num_equations+2]; };
 	
 	realtype log_func(realtype x) const {
 		if (_use_log_spline) return log_approx(x);
