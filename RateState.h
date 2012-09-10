@@ -47,7 +47,9 @@ class EqnSolver {
 public:
 	virtual ~EqnSolver(void) {};
 	virtual int init(ViCaRS *sim) = 0;
-	virtual unsigned int num_equations(void) = 0;
+	virtual unsigned int num_equations(void) const = 0;
+	
+	virtual std::string var_name(unsigned int var_num) const = 0;
 	
 	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) = 0;
 	virtual bool has_jacobian(void) = 0;
@@ -62,7 +64,9 @@ public:
 	virtual ~OrigEqns(void) {};
 	
 	virtual int init(ViCaRS *sim);
-	virtual unsigned int num_equations(void) { return 3; };
+	virtual unsigned int num_equations(void) const { return 3; };
+	
+	virtual std::string var_name(unsigned int var_num) const;
 	
 	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot);
 	virtual bool has_jacobian(void) { return true; };
@@ -90,7 +94,9 @@ public:
 	SimpleEqns(void) {};
 	virtual ~SimpleEqns(void) {};
 	virtual int init(ViCaRS *sim);
-	virtual unsigned int num_equations(void) { return 2; };
+	virtual unsigned int num_equations(void) const { return 2; };
+	
+	virtual std::string var_name(unsigned int var_num) const;
 	
 	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot);
 	virtual bool has_jacobian(void) { return false; };

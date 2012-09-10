@@ -400,6 +400,23 @@ bool OrigEqns::values_valid(ViCaRS *sim, N_Vector y) {
 	return (!local_fail);
 }
 
+std::string OrigEqns::var_name(unsigned int var_num) const {
+	switch (var_num) {
+		case 0: return "X";
+		case 1: return "V";
+		case 2: return "H";
+		default: throw std::exception();
+	}
+}
+
+std::string SimpleEqns::var_name(unsigned int var_num) const {
+	switch (var_num) {
+		case 0: return "X";
+		case 1: return "H";
+		default: throw std::exception();
+	}
+}
+
 int OrigEqns::init(ViCaRS *sim) {
 	return 0;
 }
