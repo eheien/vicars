@@ -50,7 +50,7 @@ public:
 	virtual unsigned int num_equations(void) const = 0;
 	virtual unsigned int num_outputs(void) const = 0;
 	
-	virtual void init_block(BlockGID gid, const BlockData &block, N_Vector y) = 0;
+	virtual void init_block(BlockGID gid, const BlockData &block, N_Vector vars, N_Vector tols) = 0;
 	
 	virtual std::string var_name(unsigned int var_num) const = 0;
 	virtual realtype var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y) = 0;
@@ -78,7 +78,7 @@ public:
 	virtual unsigned int num_equations(void) const { return 3; };
 	virtual unsigned int num_outputs(void) const { return 4; };
 	
-	virtual void init_block(BlockGID gid, const BlockData &block, N_Vector y);
+	virtual void init_block(BlockGID gid, const BlockData &block, N_Vector vars, N_Vector tols);
 	
 	virtual std::string var_name(unsigned int var_num) const;
 	virtual realtype var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y);
@@ -126,7 +126,7 @@ public:
 	virtual unsigned int num_equations(void) const { return 2; };
 	virtual unsigned int num_outputs(void) const { return 3; };
 	
-	virtual void init_block(BlockGID gid, const BlockData &block, N_Vector y);
+	virtual void init_block(BlockGID gid, const BlockData &block, N_Vector vars, N_Vector tols);
 	
 	virtual std::string var_name(unsigned int var_num) const;
 	virtual realtype var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y);

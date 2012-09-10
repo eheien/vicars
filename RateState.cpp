@@ -21,7 +21,6 @@ int ViCaRS::add_block(const BlockGID &id, const BlockData &block_data) {
 int ViCaRS::init(void) {
 	unsigned int	num_local;
 	int				flag, rootdir;
-	realtype		*toldata;
 	BlockGID		gid;
 	BlockMap::const_iterator	it;
 	
@@ -40,15 +39,10 @@ int ViCaRS::init(void) {
 	
 	// Initialize variables and tolerances
 	_rel_tol = RCONST(1.0e-7);
-	toldata = NV_DATA_S(_abs_tol);
 	
 	for (it=_bdata.begin();it!=_bdata.end();++it) {
 		gid = it->first;
-		_eqns->init_block(gid, it->second, _vars);
-		
-		toldata[_num_equations*gid+0] = _bdata[gid]._tol_x;
-		toldata[_num_equations*gid+1] = _bdata[gid]._tol_v;
-		toldata[_num_equations*gid+2] = _bdata[gid]._tol_h;
+		_eqns->init_block(gid, it->second, _vars, _abs_tol);
 	}
 	
 	// Init CVodes structures
@@ -436,15 +430,22 @@ realtype SimpleEqns::var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, 
 	}
 }
 
-void OrigEqns::init_block(BlockGID gid, const BlockData &block, N_Vector y) {
-	Xth(y, gid) = block._init_x;
-	Vth(y, gid) = block._init_v;
-	Hth(y, gid) = block._init_h;
+void OrigEqns::init_block(BlockGID gid, const BlockData &block, N_Vector vars, N_Vector tols) {
+	Xth(vars, gid) = block._init_x;
+	Vth(vars, gid) = block._init_v;
+	Hth(vars, gid) = block._init_h;
+	
+	Xth(tols, gid) = block._tol_x;
+	Vth(tols, gid) = block._tol_v;
+	Hth(tols, gid) = block._tol_h;
 }
 
-void SimpleEqns::init_block(BlockGID gid, const BlockData &block, N_Vector y) {
-	Xth(y, gid) = block._init_x;
-	Hth(y, gid) = block._init_h;
+void SimpleEqns::init_block(BlockGID gid, const BlockData &block, N_Vector vars, N_Vector tols) {
+	Xth(vars, gid) = block._init_x;
+	Hth(vars, gid) = block._init_h;
+	
+	Xth(tols, gid) = block._tol_x;
+	Hth(tols, gid) = block._tol_h;
 }
 
 int OrigEqns::init(ViCaRS *sim) {
