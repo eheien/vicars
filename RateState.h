@@ -51,7 +51,7 @@ public:
 	virtual unsigned int num_outputs(void) const = 0;
 	
 	virtual std::string var_name(unsigned int var_num) const = 0;
-	virtual realtype var_value(unsigned int var_num, BlockGID gid, N_Vector y) const = 0;
+	virtual realtype var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y) = 0;
 	
 	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) = 0;
 	virtual bool has_jacobian(void) = 0;
@@ -62,7 +62,14 @@ public:
 };
 
 class OrigEqns : public EqnSolver {
+private:
+	LogSpline				log_approx;
+	
+	// Whether to use the log spline approximation or not
+	bool                    _use_log_spline;
+	
 public:
+	OrigEqns(void) : log_approx(-40, 2, 1e12, 1e5, 15), _use_log_spline(false) {};
 	virtual ~OrigEqns(void) {};
 	
 	virtual int init(ViCaRS *sim);
@@ -70,7 +77,7 @@ public:
 	virtual unsigned int num_outputs(void) const { return 4; };
 	
 	virtual std::string var_name(unsigned int var_num) const;
-	virtual realtype var_value(unsigned int var_num, BlockGID gid, N_Vector y) const;
+	virtual realtype var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y);
 	
 	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot);
 	virtual bool has_jacobian(void) { return true; };
@@ -82,6 +89,20 @@ public:
 	realtype &Xth(N_Vector y, BlockGID bnum) { return NV_Ith_S(y,bnum*3+0); };
 	realtype &Vth(N_Vector y, BlockGID bnum) { return NV_Ith_S(y,bnum*3+1); };
 	realtype &Hth(N_Vector y, BlockGID bnum) { return NV_Ith_S(y,bnum*3+2); };
+	
+	realtype log_func(realtype x) const {
+		if (_use_log_spline) return log_approx(x);
+		else return log(x);
+	}
+	
+	realtype log_deriv(realtype x) const {
+		if (_use_log_spline) return log_approx.deriv(x);
+		else return 1/x;
+	}
+	
+	realtype F(realtype a, realtype b, realtype v, realtype h) {
+		return 1 + a*log_func(v) + b*log_func(h);
+	}
 };
 
 class SimpleEqns : public EqnSolver {
@@ -102,7 +123,7 @@ public:
 	virtual unsigned int num_outputs(void) const { return 3; };
 	
 	virtual std::string var_name(unsigned int var_num) const;
-	virtual realtype var_value(unsigned int var_num, BlockGID gid, N_Vector y) const;
+	virtual realtype var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y);
 	
 	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot);
 	virtual bool has_jacobian(void) { return false; };
@@ -171,11 +192,6 @@ private:
 	// Whether to use simple (dieterich-style) equations or full rate/state equations
 	bool                    _use_simple_equations;
 	
-	LogSpline				log_approx;
-	
-	// Whether to use the log spline approximation or not
-	bool                    _use_log_spline;
-	
 	EqnSolver				*_eqns;
 	
 	VCDenseStdStraight greens_matrix;
@@ -216,7 +232,6 @@ public:
 	realtype rupture_threshold(void) const { return _rupture_threshold; };
 	
 	bool use_slowness_law(void) const { return _use_slowness_law; };
-	bool use_log_spline(void) const { return _use_log_spline; };
 	bool use_simple_equations(void) const { return _use_simple_equations; };
 	
 	unsigned int num_global_blocks(void) const { return _num_global_blocks; };
@@ -230,20 +245,6 @@ public:
 	realtype &X(BlockGID block_num) { return NV_DATA_S(_vars)[block_num*_num_equations+0]; };
 	realtype &V(BlockGID block_num) { return NV_DATA_S(_vars)[block_num*_num_equations+1]; };
 	realtype &H(BlockGID block_num) { return NV_DATA_S(_vars)[block_num*_num_equations+2]; };
-	
-	realtype log_func(realtype x) const {
-		if (_use_log_spline) return log_approx(x);
-		else return log(x);
-	}
-	
-	realtype log_deriv(realtype x) const {
-		if (_use_log_spline) return log_approx.deriv(x);
-		else return 1/x;
-	}
-	
-	realtype F(BlockGID block_num, realtype v, realtype h) {
-		return 1 + param_a(block_num) * log_func(v) + param_b(block_num)*log_func(h);
-	}
 	
 	void write_header(FILE *fp);
 	void write_summary(FILE *fp);

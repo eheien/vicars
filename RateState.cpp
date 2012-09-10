@@ -1,10 +1,9 @@
 #include "RateState.h"
 
-ViCaRS::ViCaRS(unsigned int total_num_blocks) : _num_global_blocks(total_num_blocks), log_approx(-40, 2, 1e12, 1e5, 15), greens_matrix(total_num_blocks, total_num_blocks)
+ViCaRS::ViCaRS(unsigned int total_num_blocks) : _num_global_blocks(total_num_blocks), greens_matrix(total_num_blocks, total_num_blocks)
 {
     _solver_long = _solver_rupture = _current_solver = NULL;
     _use_slowness_law = true;
-    _use_log_spline = false;
     _use_simple_equations = true;
 	_G = 3.0e10;
     //v_ss = 0.01;
@@ -280,38 +279,16 @@ void ViCaRS::write_summary(FILE *fp) {
 }
 
 void ViCaRS::write_cur_data(FILE *fp) {
-	realtype			xi, vi, hi;
 	BlockMap::const_iterator	it;
+	unsigned int				vnum;
 	
 	fprintf(fp, "%0.7e %d ", _cur_time, _in_rupture);
 	for (it=_bdata.begin();it!=_bdata.end();++it) {
-		xi = X(it->first);
-		vi = V(it->first);
-		hi = H(it->first);
-		fprintf(fp, "%14.6e %14.6e %14.6e %14.6e ", xi, vi, hi, F(it->first, vi, hi));
+		for (vnum=0;vnum<_eqns->num_outputs();++vnum) {
+			fprintf(fp, "%14.6e ", _eqns->var_value(this, vnum, it->first, _vars));
+		}
 	}
 	fprintf(fp, "\n");
-}
-
-realtype OrigEqns::var_value(unsigned int var_num, BlockGID gid, N_Vector y) const {
-	switch (var_num) {
-		case 0:
-		case 1:
-		case 2:
-			return NV_DATA_S(y)[gid*num_equations()+var_num];
-		case 3:
-			return 0;	// Calculate F
-	}
-}
-
-realtype SimpleEqns::var_value(unsigned int var_num, BlockGID gid, N_Vector y) const {
-	switch (var_num) {
-		case 0:
-		case 1:
-			return NV_DATA_S(y)[gid*num_equations()+var_num];
-		case 2:
-			return 0;	// Calculate V
-	}
 }
 
 void ViCaRS::update_stats(void *solver, SolverStats &stats) {
@@ -410,7 +387,7 @@ bool OrigEqns::values_valid(ViCaRS *sim, N_Vector y) {
 	int			local_fail;
 	BlockMap::const_iterator	it;
 	
-	if (sim->use_log_spline()) return true;
+	if (_use_log_spline) return true;
 	
 	// Check if any velocity or theta values are below 0
 	local_fail = 0;
@@ -439,6 +416,27 @@ std::string SimpleEqns::var_name(unsigned int var_num) const {
 		case 0: return "X";
 		case 1: return "H";
 		case 2: return "V";
+		default: throw std::exception();
+	}
+}
+
+realtype OrigEqns::var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y) {
+	switch (var_num) {
+		case 0: return Xth(y, gid);
+		case 1: return Vth(y, gid);
+		case 2: return Hth(y, gid);
+		case 3: return F(sim->param_a(gid), sim->param_a(gid), Vth(y, gid), Hth(y, gid));
+		default: throw std::exception();
+	}
+}
+
+realtype SimpleEqns::var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y) {
+	switch (var_num) {
+		case 0:
+		case 1:
+			return NV_DATA_S(y)[gid*num_equations()+var_num];
+		case 2:
+			return 0;	// Calculate V
 		default: throw std::exception();
 	}
 }
@@ -504,7 +502,7 @@ int OrigEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 		v = Vth(y,i_gid);
 		h = Hth(y,i_gid);
 		
-		friction_force = sim->param_k(i_gid)*sim->F(i_gid,v,h);
+		friction_force = sim->param_k(i_gid)*F(sim->param_a(i_gid),sim->param_b(i_gid),v,h);
 		
 		// calculate interaction force
 		spring_force = 0;
@@ -520,7 +518,7 @@ int OrigEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 		Xth(ydot,i_gid) = v;
 		Vth(ydot,i_gid) = (t-x-friction_force-spring_force)/sim->param_r(i_gid);
         if (sim->use_slowness_law()) Hth(ydot,i_gid) = RCONST(1) - h*v;
-        else Hth(ydot,i_gid) = -h*v*sim->log_func(h*v);
+        else Hth(ydot,i_gid) = -h*v*log_func(h*v);
 	}
 	
 	return 0;
@@ -548,17 +546,17 @@ int OrigEqns::jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realty
 		gid = it->first;
 		Xth(Jv,gid) =	1 * Vth(v,gid);
 		Vth(Jv,gid) =	(-RCONST(1)/sim->param_r(gid)) * Xth(v,gid)
-		+ -(sim->param_k(gid)*sim->param_a(gid)*sim->log_deriv((Vth(y,gid)))/(sim->param_r(gid))) * Vth(v,gid)
+		+ -(sim->param_k(gid)*sim->param_a(gid)*log_deriv((Vth(y,gid)))/(sim->param_r(gid))) * Vth(v,gid)
 		+ -(sim->param_k(gid)*sim->param_b(gid)/(sim->param_r(gid)*Hth(y,gid))) * Hth(v,gid);
         
         if (sim->use_slowness_law()) {
             Hth(Jv,gid) =	-Hth(y,gid) * Vth(v,gid)
 			+ -Vth(y,gid) * Hth(v,gid);
         } else {
-            Hth(Jv,gid) = -Hth(y,gid)*(sim->log_func(Hth(y,gid)*Vth(y,gid))
-									   + Hth(y,gid)*Vth(y,gid) * sim->log_deriv(Hth(y,gid)*Vth(y,gid))) * Vth(v,gid)
-			- Vth(y,gid)*(sim->log_func(Hth(y,gid)*Vth(y,gid))
-						  + Hth(y,gid)*Vth(y,gid)*sim->log_deriv(Hth(y,gid)*Vth(y,gid))) * Hth(v,gid);
+            Hth(Jv,gid) = -Hth(y,gid)*(log_func(Hth(y,gid)*Vth(y,gid))
+									   + Hth(y,gid)*Vth(y,gid) * log_deriv(Hth(y,gid)*Vth(y,gid))) * Vth(v,gid)
+			- Vth(y,gid)*(log_func(Hth(y,gid)*Vth(y,gid))
+						  + Hth(y,gid)*Vth(y,gid)*log_deriv(Hth(y,gid)*Vth(y,gid))) * Hth(v,gid);
         }
 	}
 	
