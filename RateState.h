@@ -50,6 +50,8 @@ public:
 	virtual unsigned int num_equations(void) const = 0;
 	virtual unsigned int num_outputs(void) const = 0;
 	
+	virtual void init_block(BlockGID gid, const BlockData &block, N_Vector y) = 0;
+	
 	virtual std::string var_name(unsigned int var_num) const = 0;
 	virtual realtype var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y) = 0;
 	
@@ -75,6 +77,8 @@ public:
 	virtual int init(ViCaRS *sim);
 	virtual unsigned int num_equations(void) const { return 3; };
 	virtual unsigned int num_outputs(void) const { return 4; };
+	
+	virtual void init_block(BlockGID gid, const BlockData &block, N_Vector y);
 	
 	virtual std::string var_name(unsigned int var_num) const;
 	virtual realtype var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y);
@@ -121,6 +125,8 @@ public:
 	virtual int init(ViCaRS *sim);
 	virtual unsigned int num_equations(void) const { return 2; };
 	virtual unsigned int num_outputs(void) const { return 3; };
+	
+	virtual void init_block(BlockGID gid, const BlockData &block, N_Vector y);
 	
 	virtual std::string var_name(unsigned int var_num) const;
 	virtual realtype var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y);
@@ -198,7 +204,6 @@ private:
 	int fill_greens_matrix(void);
 	
 public:
-	N_Vector _stress;
 	//realtype h_ss, v_ss, v_eq, v_min;
 	
 	typedef BlockMap::iterator iterator;
@@ -232,7 +237,6 @@ public:
 	realtype rupture_threshold(void) const { return _rupture_threshold; };
 	
 	bool use_slowness_law(void) const { return _use_slowness_law; };
-	bool use_simple_equations(void) const { return _use_simple_equations; };
 	
 	unsigned int num_global_blocks(void) const { return _num_global_blocks; };
 	unsigned int num_eqs(void) const { return _num_equations; };
@@ -241,10 +245,6 @@ public:
 	realtype &param_b(BlockGID block_num) { return _bdata[block_num]._b; };
 	realtype &param_k(BlockGID block_num) { return _bdata[block_num]._k; };
 	realtype &param_r(BlockGID block_num) { return _bdata[block_num]._r; };
-	
-	realtype &X(BlockGID block_num) { return NV_DATA_S(_vars)[block_num*_num_equations+0]; };
-	realtype &V(BlockGID block_num) { return NV_DATA_S(_vars)[block_num*_num_equations+1]; };
-	realtype &H(BlockGID block_num) { return NV_DATA_S(_vars)[block_num*_num_equations+2]; };
 	
 	void write_header(FILE *fp);
 	void write_summary(FILE *fp);

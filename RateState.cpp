@@ -35,8 +35,6 @@ int ViCaRS::init(void) {
 	num_local = (unsigned int)_bdata.size();
 	_vars = N_VNew_Serial(_num_global_blocks*_num_equations);
 	if (_vars == NULL) return 1;
-	_stress = N_VNew_Serial(_num_global_blocks);
-	if (_stress == NULL) return 1;
 	_abs_tol = N_VNew_Serial(_num_global_blocks*_num_equations);
 	if (_abs_tol == NULL) return 1;
 	
@@ -46,9 +44,7 @@ int ViCaRS::init(void) {
 	
 	for (it=_bdata.begin();it!=_bdata.end();++it) {
 		gid = it->first;
-		X(gid) = _bdata[gid]._init_x;
-		V(gid) = _bdata[gid]._init_v;
-		H(gid) = _bdata[gid]._init_h;
+		_eqns->init_block(gid, it->second, _vars);
 		
 		toldata[_num_equations*gid+0] = _bdata[gid]._tol_x;
 		toldata[_num_equations*gid+1] = _bdata[gid]._tol_v;
@@ -224,7 +220,6 @@ int ViCaRS::advance(void) {
 void ViCaRS::cleanup(void) {
 	// Free y and abstol vectors
 	N_VDestroy_Serial(_vars);
-	N_VDestroy_Serial(_stress);
 	N_VDestroy_Serial(_abs_tol);
 	
 	// Free integrator memory
@@ -265,7 +260,7 @@ void ViCaRS::write_summary(FILE *fp) {
 	max_v = -DBL_MAX;
 	
 	for (it=begin();it!=end();++it) {
-		v = V(it->first);
+		v = 0;//V(it->first);
 		if (min_v >= v) {
 			min_v = v;
 			min_v_gid = it->first;
@@ -441,6 +436,17 @@ realtype SimpleEqns::var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, 
 	}
 }
 
+void OrigEqns::init_block(BlockGID gid, const BlockData &block, N_Vector y) {
+	Xth(y, gid) = block._init_x;
+	Vth(y, gid) = block._init_v;
+	Hth(y, gid) = block._init_h;
+}
+
+void SimpleEqns::init_block(BlockGID gid, const BlockData &block, N_Vector y) {
+	Xth(y, gid) = block._init_x;
+	Hth(y, gid) = block._init_h;
+}
+
 int OrigEqns::init(ViCaRS *sim) {
 	return 0;
 }
@@ -482,8 +488,6 @@ int SimpleEqns::init(ViCaRS *sim) {
 		sum_load += v_ss*sim->G()/W;
 		_stress_loading[it->first] = sum_load;
 	}
-	
-	//std::cerr << _ss_stress[0] << " " << _stress_loading[0] << " " << _ss_stress[0]/_stress_loading[0] << std::endl;
 	
 	return 0;
 }
