@@ -241,11 +241,14 @@ realtype ViCaRS::interaction(BlockGID i, BlockGID j) { return greens_matrix.val(
 void ViCaRS::write_header(FILE *fp) {
 	BlockMap::const_iterator	it;
 	BlockGID		gid;
+	unsigned int		vnum;
 	
 	fprintf(fp, "t S ");
 	for (it=_bdata.begin();it!=_bdata.end();++it) {
 		gid = it->first;
-		fprintf(fp, "x%d v%d h%d F%d ", gid, gid, gid, gid);
+		for (vnum=0;vnum<_eqns->num_outputs();++vnum) {
+			fprintf(fp, "%s%d ", _eqns->var_name(vnum).c_str(), gid);
+		}
 	}
 	fprintf(fp, "\n");
 }
@@ -288,6 +291,27 @@ void ViCaRS::write_cur_data(FILE *fp) {
 		fprintf(fp, "%14.6e %14.6e %14.6e %14.6e ", xi, vi, hi, F(it->first, vi, hi));
 	}
 	fprintf(fp, "\n");
+}
+
+realtype OrigEqns::var_value(unsigned int var_num, BlockGID gid, N_Vector y) const {
+	switch (var_num) {
+		case 0:
+		case 1:
+		case 2:
+			return NV_DATA_S(y)[gid*num_equations()+var_num];
+		case 3:
+			return 0;	// Calculate F
+	}
+}
+
+realtype SimpleEqns::var_value(unsigned int var_num, BlockGID gid, N_Vector y) const {
+	switch (var_num) {
+		case 0:
+		case 1:
+			return NV_DATA_S(y)[gid*num_equations()+var_num];
+		case 2:
+			return 0;	// Calculate V
+	}
 }
 
 void ViCaRS::update_stats(void *solver, SolverStats &stats) {
@@ -405,6 +429,7 @@ std::string OrigEqns::var_name(unsigned int var_num) const {
 		case 0: return "X";
 		case 1: return "V";
 		case 2: return "H";
+		case 3: return "F";
 		default: throw std::exception();
 	}
 }
@@ -413,6 +438,7 @@ std::string SimpleEqns::var_name(unsigned int var_num) const {
 	switch (var_num) {
 		case 0: return "X";
 		case 1: return "H";
+		case 2: return "V";
 		default: throw std::exception();
 	}
 }
@@ -542,9 +568,8 @@ int OrigEqns::jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realty
 // Simple eqns Jacobian
 // Term		Phase 0		Phase 1		Phase 2
 // dX/dX =	0			0			0
-// dX/dS =	0
 // dX/dH =	0
-// dS/dX = 
+// dH/dX = 
 int SimpleEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 	BlockMap::const_iterator	it, j;
 	int             phase_num;
@@ -626,9 +651,13 @@ void SimpleEqns::handle_mode_change(ViCaRS *sim, realtype t, N_Vector y) {
 	for (it=sim->begin();it!=sim->end();++it) {
 		gid = it->first;
 		
-		if (phase[gid] == 0 && _elem_stress[gid] >= _ss_stress[gid]) phase[gid] = 1;
-		else if (phase[gid] == 1 && _vel[gid] >= _v_eq[gid]) phase[gid] = 2;
-		else if (phase[gid] == 2 && _ss_stress[gid] >= _elem_stress[gid]) phase[gid] = 0;
+		if (phase[gid] == 0 && _elem_stress[gid] >= _ss_stress[gid]) {
+			phase[gid] = 1;
+		} else if (phase[gid] == 1 && _vel[gid] >= _v_eq[gid]) {
+			phase[gid] = 2;
+		} else if (phase[gid] == 2 && _ss_stress[gid] >= _elem_stress[gid]) {
+			phase[gid] = 0;
+		}
 	}
 }
 
