@@ -231,7 +231,7 @@ void ViCaRS::write_header(FILE *fp) {
 	BlockGID		gid;
 	unsigned int		vnum;
 	
-	fprintf(fp, "t S ");
+	fprintf(fp, "t ");
 	for (it=_bdata.begin();it!=_bdata.end();++it) {
 		gid = it->first;
 		for (vnum=0;vnum<_eqns->num_outputs();++vnum) {
@@ -271,7 +271,7 @@ void ViCaRS::write_cur_data(FILE *fp) {
 	BlockMap::const_iterator	it;
 	unsigned int				vnum;
 	
-	fprintf(fp, "%0.7e %d ", _cur_time, _in_rupture);
+	fprintf(fp, "%0.7e ", _cur_time);
 	for (it=_bdata.begin();it!=_bdata.end();++it) {
 		for (vnum=0;vnum<_eqns->num_outputs();++vnum) {
 			fprintf(fp, "%14.6e ", _eqns->var_value(this, vnum, it->first, _vars));
@@ -405,6 +405,8 @@ std::string SimpleEqns::var_name(unsigned int var_num) const {
 		case 0: return "X";
 		case 1: return "H";
 		case 2: return "V";
+		case 3: return "S";
+		case 4: return "P";
 		default: throw std::exception();
 	}
 }
@@ -422,10 +424,10 @@ realtype OrigEqns::var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_
 realtype SimpleEqns::var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y) {
 	switch (var_num) {
 		case 0:
-		case 1:
-			return NV_DATA_S(y)[gid*num_equations()+var_num];
-		case 2:
-			return 0;	// Calculate V
+		case 1: return NV_DATA_S(y)[gid*num_equations()+var_num];
+		case 2: return _vel[gid];
+		case 3: return _elem_stress[gid];
+		case 4: return _phase[gid];
 		default: throw std::exception();
 	}
 }
@@ -441,6 +443,8 @@ void OrigEqns::init_block(BlockGID gid, const BlockData &block, N_Vector vars, N
 }
 
 void SimpleEqns::init_block(BlockGID gid, const BlockData &block, N_Vector vars, N_Vector tols) {
+	_start_time[gid] = 0;
+	
 	Xth(vars, gid) = block._init_x;
 	Hth(vars, gid) = block._init_h;
 	
@@ -458,14 +462,14 @@ int SimpleEqns::init(ViCaRS *sim) {
 	
 	// Start all blocks in phase 0
 	for (it=sim->begin();it!=sim->end();++it) {
-		phase[it->first] = 0;
+		_phase[it->first] = 0;
 	}
 	
 	mu_0 = 0.5;
 	A = 0.005;
 	B = 0.015;
 	D_c = 0.01*1e-3;
-	sigma_i = 1;
+	sigma_i = 15e6;						// Pascals
 	_v_star = 1.0/(1.0e5*365.25*86400);	// 1 meter/1e5 years in m/s
 	_theta_star = D_c/_v_star;
 	
@@ -479,6 +483,7 @@ int SimpleEqns::init(ViCaRS *sim) {
 		_ss_stress[it->first] = sigma_i*(mu_0+(A-B)*log(v_ss/_v_star));
 		_v_eq[it->first] = 2*beta*delta_tau/sim->G();
 		_base_stress[it->first] = _elem_stress[it->first] = 0;
+		_start_time[it->first] = 0;
 	}
 	
 	for (it=sim->begin();it!=sim->end();++it) {
@@ -577,12 +582,12 @@ int SimpleEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 	BlockMap::const_iterator	it, j;
 	int             phase_num;
 	BlockGID        gid;
-	realtype        x, h, v_0=0.001, tau_dot, H, K;
+	realtype        x, h, v_0=0.001, tau_dot, H, K, q;
 	
 	// Calculate velocities and stresses on blocks
 	for (it=sim->begin();it!=sim->end();++it) {
 		gid = it->first;
-		switch (phase[gid]) {
+		switch (_phase[gid]) {
 			case 0:
 				_vel[gid] = 0;
 				_elem_stress[gid] = _base_stress[gid] + (t-_start_time[gid])*_stress_loading[gid];
@@ -591,7 +596,8 @@ int SimpleEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 				K = -sim->interaction(gid, gid)+1;	// K_T = 1 arbitrarily, need to change this
 				H = B/D_c-K/sigma_i;
 				tau_dot = _stress_loading[gid];
-				_vel[gid] = 1.0/((1.0/v_0+H*sigma_i/tau_dot)*exp(-tau_dot*(t-_start_time[gid])/(A*sigma_i)) - H*sigma_i/tau_dot);
+				q = 1.0/((1.0/v_0+H*sigma_i/tau_dot)*exp(-tau_dot*(t-_start_time[gid])/(A*sigma_i)) - H*sigma_i/tau_dot);
+				_vel[gid] = q;
 				_elem_stress[gid] = sigma_i*(mu_0+A*log(_vel[gid]/_v_star)+B*log(Hth(y,gid)/_theta_star));
 				break;
 			case 2:
@@ -604,7 +610,7 @@ int SimpleEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 	for (it=sim->begin();it!=sim->end();++it) {
 		gid = it->first;
 		
-		phase_num = phase[gid];
+		phase_num = _phase[gid];
 		
 		x = Xth(y,gid);
 		h = Hth(y,gid);
@@ -633,10 +639,19 @@ int SimpleEqns::check_for_mode_change(ViCaRS *sim, realtype t, N_Vector y, realt
 	for (it=sim->begin();it!=sim->end();++it) {
 		gid = it->first;
 		
-		if (phase[gid] == 0) max_val = fmax(max_val, _elem_stress[gid] - _ss_stress[gid]);
-		else if (phase[gid] == 1) max_val = fmax(max_val, _vel[gid] - _v_eq[gid]);
-		else if (phase[gid] == 2) max_val = fmax(max_val, _ss_stress[gid] - _elem_stress[gid]);
-		else return 1;
+		switch (_phase[gid]) {
+			case 0:
+				max_val = fmax(max_val, _elem_stress[gid] - _ss_stress[gid]);
+				break;
+			case 1:
+				max_val = fmax(max_val, _vel[gid] - _v_eq[gid]);
+				break;
+			case 2:
+				max_val = fmax(max_val, _ss_stress[gid] - _elem_stress[gid]);
+				break;
+			default:
+				return 1;
+		}
 	}
 	
 	gout[0] = max_val;
@@ -653,13 +668,12 @@ void SimpleEqns::handle_mode_change(ViCaRS *sim, realtype t, N_Vector y) {
 	
 	for (it=sim->begin();it!=sim->end();++it) {
 		gid = it->first;
-		
-		if (phase[gid] == 0 && _elem_stress[gid] >= _ss_stress[gid]) {
-			phase[gid] = 1;
-		} else if (phase[gid] == 1 && _vel[gid] >= _v_eq[gid]) {
-			phase[gid] = 2;
-		} else if (phase[gid] == 2 && _ss_stress[gid] >= _elem_stress[gid]) {
-			phase[gid] = 0;
+		if (_phase[gid] == 0 && _elem_stress[gid] >= _ss_stress[gid]) {
+			_phase[gid] = 1;
+		} else if (_phase[gid] == 1 && _vel[gid] >= _v_eq[gid]) {
+			_phase[gid] = 2;
+		} else if (_phase[gid] == 2 && _ss_stress[gid] >= _elem_stress[gid]) {
+			_phase[gid] = 0;
 		}
 	}
 }

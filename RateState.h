@@ -112,7 +112,7 @@ public:
 class SimpleEqns : public EqnSolver {
 private:
 	// Phase of each element
-	std::map<BlockGID, int> phase;
+	std::map<BlockGID, int> _phase;
 	
 	std::map<BlockGID, realtype>	_ss_stress, _stress_loading, _start_time, _vel, _v_eq;
 	std::map<BlockGID, realtype>	_base_stress, _elem_stress;
@@ -124,7 +124,7 @@ public:
 	virtual ~SimpleEqns(void) {};
 	virtual int init(ViCaRS *sim);
 	virtual unsigned int num_equations(void) const { return 2; };
-	virtual unsigned int num_outputs(void) const { return 3; };
+	virtual unsigned int num_outputs(void) const { return 5; };
 	
 	virtual void init_block(BlockGID gid, const BlockData &block, N_Vector vars, N_Vector tols);
 	
