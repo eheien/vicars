@@ -204,8 +204,6 @@ private:
 	int fill_greens_matrix(void);
 	
 public:
-	//realtype h_ss, v_ss, v_eq, v_min;
-	
 	typedef BlockMap::iterator iterator;
 	typedef BlockMap::const_iterator const_iterator;
 	
