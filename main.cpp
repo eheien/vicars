@@ -1,6 +1,7 @@
 #include "RateState.h"
 
 #define NBLOCKS			1
+#define USE_SIMPLIFIED_EQNS
 
 int main(int argc, char **argv)
 {
@@ -46,6 +47,15 @@ int main(int argc, char **argv)
 		sim.add_block(i, bdata);
 	}
 	
+	// Whether to use simple (Dieterich-style) equations or full rate/state equations
+	EqnSolver		*eqns;
+	
+#ifdef USE_SIMPLIFIED_EQNS
+	eqns = new SimpleEqns;
+#else
+	eqns = new OrigEqns;
+#endif
+	
 	// Set the threshold for a rupture to be 0.1 m/s
 	sim.set_rupture_threshold(0.1);
 	
@@ -53,7 +63,7 @@ int main(int argc, char **argv)
 	sim.set_timesteps(1, 0.1);
 	sim.set_timesteps(86400, 0.5);
 	
-	res = sim.init();
+	res = sim.init(eqns);
 	if (res) {
 		std::cerr << "Initializing error." << std::endl;
 		exit(-1);

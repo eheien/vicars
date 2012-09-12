@@ -4,7 +4,6 @@ ViCaRS::ViCaRS(unsigned int total_num_blocks) : _num_global_blocks(total_num_blo
 {
     _solver_long = _solver_rupture = _current_solver = NULL;
     _use_slowness_law = true;
-    _use_simple_equations = true;
 	_G = 3.0e10;
 }
 
@@ -14,14 +13,13 @@ int ViCaRS::add_block(const BlockGID &id, const BlockData &block_data) {
 	return 0;
 }
 
-int ViCaRS::init(void) {
+int ViCaRS::init(EqnSolver *eqns) {
 	unsigned int	num_local;
 	int				flag, rootdir;
 	BlockGID		gid;
 	BlockMap::const_iterator	it;
 	
-	if (_use_simple_equations) _eqns = new SimpleEqns;
-	else _eqns = new OrigEqns;
+	_eqns = eqns;
 	_num_equations = _eqns->num_equations();
 	
 	flag = fill_greens_matrix();
