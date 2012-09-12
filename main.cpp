@@ -41,7 +41,7 @@ int main(int argc, char **argv)
         x_err = v_err = h_err = RCONST(1e-6);
         x_0 = -14.5 + i;
         h_0 = 1;
-        v_0 = 0;
+        v_0 = 1;
 		BlockData	bdata(param_a, param_b, param_k, param_r, x_0, v_0, h_0, x_err, v_err, h_err);
 		sim.add_block(i, bdata);
 	}
@@ -51,6 +51,7 @@ int main(int argc, char **argv)
 	
 	// Set the timesteps for each solver (in seconds)
 	sim.set_timesteps(1, 0.1);
+	sim.set_timesteps(86400, 0.5);
 	
 	res = sim.init();
 	if (res) {
@@ -60,7 +61,7 @@ int main(int argc, char **argv)
 	
 	fp = fopen("out.txt", "w");
 	sim.write_header(fp);
-	while(sim.get_time() <= 500) {
+	while(sim.get_time() <= 10*365.25*86400) {
 		res = sim.advance();
 		if (res != 0) {
 			std::cerr << "Err " << res << std::endl;

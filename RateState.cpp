@@ -4,7 +4,7 @@ ViCaRS::ViCaRS(unsigned int total_num_blocks) : _num_global_blocks(total_num_blo
 {
     _solver_long = _solver_rupture = _current_solver = NULL;
     _use_slowness_law = true;
-    _use_simple_equations = false;
+    _use_simple_equations = true;
 	_G = 3.0e10;
 }
 
@@ -120,60 +120,6 @@ int ViCaRS::init_solver(void **created_solver, int rootdir) {
 	
 	return 0;
 }
-
-/*
-int ViCaRS::advance_simple(void) {
-	int flag, block_phase;
-	realtype tstep;
-	unsigned int lid;
-	BlockGID gid;
-	
-	// phase changed occured during last time-step
-	else if (flag == CV_ROOT_RETURN) {
-		update_stats(_solver_long, _stats_long);
-		update_stats(_solver_rupture, _stats_rupture);
-		
-		CVodeGetRootInfo(_current_solver, _roots);
-		
-		_in_rupture = false;
-		
-		GlobalLocalMap::const_iterator	it;
-		for (it=_global_local_map.begin();it!=_global_local_map.end();++it) {
-			gid = it->first;
-			lid = it->second;
-			
-			// if block phase change detected by cvodes root-finder
-			if (_roots[gid] != 0) {
-				
-				block_phase = phase[gid];
-				
-				// going into rupture mode: 0 -> 1 or 1 -> 2
-				if (block_phase == 0 || block_phase == 1) _in_rupture = true;
-				
-				// change block phase
-				if (block_phase == 0) {
-					phase[gid] = 1;
-					Vth(_vars,lid) = v_ss;
-					Hth(_vars,lid) = h_ss;
-				}
-				else if (block_phase == 1) {
-					phase[gid] = 2;
-					Vth(_vars,lid) = v_eq;
-				}
-				else if (block_phase == 2) {
-					phase[gid] = 0;
-					Vth(_vars,lid) = v_min;
-					Hth(_vars,lid) = 1;
-				}
-				else return -1;
-			}
-		}
-		
-		return 0;
-	}
-	
-	else return flag;
-}*/
 
 int ViCaRS::advance(void) {
 	int	flag;

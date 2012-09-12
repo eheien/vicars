@@ -195,7 +195,7 @@ private:
 	// Whether to use the slowness law (var = true) or slip law (var = false)
 	bool                    _use_slowness_law;
 	
-	// Whether to use simple (dieterich-style) equations or full rate/state equations
+	// Whether to use simple (Dieterich-style) equations or full rate/state equations
 	bool                    _use_simple_equations;
 	
 	EqnSolver				*_eqns;
