@@ -7,10 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA0113C5160B896300069FA5 /* Solver.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA0113C3160B896300069FA5 /* Solver.cpp */; };
 		AA1DA2021545E2050082AF78 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA1DA1FF1545E2050082AF78 /* main.cpp */; };
 		AA1DA2031545E2050082AF78 /* RateState.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA1DA2001545E2050082AF78 /* RateState.cpp */; };
 		AA1EE0C315C065D4003FA7AB /* Spline.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AA1EE0C115C065D4003FA7AB /* Spline.cpp */; };
 		AAAB041915C4CB7A009C6DA3 /* Matrix.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AAAB041715C4CB7A009C6DA3 /* Matrix.cpp */; };
+		AADDD130160B84AB00DECC51 /* Equations.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AADDD12E160B84AB00DECC51 /* Equations.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -26,6 +28,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AA0113C3160B896300069FA5 /* Solver.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Solver.cpp; sourceTree = SOURCE_ROOT; };
+		AA0113C4160B896300069FA5 /* Solver.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Solver.h; sourceTree = SOURCE_ROOT; };
+		AA0113C7160B948700069FA5 /* BlockData.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BlockData.h; sourceTree = SOURCE_ROOT; };
 		AA1DA1EA1545E1DE0082AF78 /* ViCaRS */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = ViCaRS; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA1DA1FF1545E2050082AF78 /* main.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = SOURCE_ROOT; usesTabs = 1; };
 		AA1DA2001545E2050082AF78 /* RateState.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = RateState.cpp; sourceTree = SOURCE_ROOT; usesTabs = 1; };
@@ -34,6 +39,8 @@
 		AA1EE0C215C065D4003FA7AB /* Spline.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Spline.h; sourceTree = SOURCE_ROOT; usesTabs = 1; };
 		AAAB041715C4CB7A009C6DA3 /* Matrix.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Matrix.cpp; sourceTree = SOURCE_ROOT; usesTabs = 1; };
 		AAAB041815C4CB7A009C6DA3 /* Matrix.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Matrix.h; sourceTree = SOURCE_ROOT; usesTabs = 1; };
+		AADDD12E160B84AB00DECC51 /* Equations.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Equations.cpp; sourceTree = SOURCE_ROOT; };
+		AADDD12F160B84AB00DECC51 /* Equations.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Equations.h; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -67,10 +74,15 @@
 			isa = PBXGroup;
 			children = (
 				AA1DA1FF1545E2050082AF78 /* main.cpp */,
+				AA0113C7160B948700069FA5 /* BlockData.h */,
+				AADDD12E160B84AB00DECC51 /* Equations.cpp */,
+				AADDD12F160B84AB00DECC51 /* Equations.h */,
 				AAAB041715C4CB7A009C6DA3 /* Matrix.cpp */,
 				AAAB041815C4CB7A009C6DA3 /* Matrix.h */,
 				AA1DA2001545E2050082AF78 /* RateState.cpp */,
 				AA1DA2011545E2050082AF78 /* RateState.h */,
+				AA0113C3160B896300069FA5 /* Solver.cpp */,
+				AA0113C4160B896300069FA5 /* Solver.h */,
 				AA1EE0C115C065D4003FA7AB /* Spline.cpp */,
 				AA1EE0C215C065D4003FA7AB /* Spline.h */,
 			);
@@ -132,6 +144,8 @@
 				AA1DA2031545E2050082AF78 /* RateState.cpp in Sources */,
 				AA1EE0C315C065D4003FA7AB /* Spline.cpp in Sources */,
 				AAAB041915C4CB7A009C6DA3 /* Matrix.cpp in Sources */,
+				AADDD130160B84AB00DECC51 /* Equations.cpp in Sources */,
+				AA0113C5160B896300069FA5 /* Solver.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

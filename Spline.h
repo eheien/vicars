@@ -6,6 +6,9 @@
 #include <iostream>
 #include <fstream>
 
+#ifndef _VICARS_SPLINE_H_
+#define _VICARS_SPLINE_H_
+
 #define TOL 1e-15
 #define MAXITER 1000
 
@@ -44,3 +47,4 @@ public:
 	~LogSpline(void);
 };
 
+#endif
