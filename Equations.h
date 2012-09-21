@@ -3,11 +3,6 @@
 
 #include <cvode/cvode.h>             /* prototypes for CVODE fcts., consts. */
 #include <nvector/nvector_serial.h>
-#include <cvode/cvode_dense.h>       /* prototype for CVDense */
-#include <sundials/sundials_dense.h> /* definitions DlsMat DENSE_ELEM */
-#include <sundials/sundials_types.h> /* definition of type realtype */
-#include <cvode/cvode_spgmr.h>
-#include <cvode/cvode_spbcgs.h>
 
 #include <string>
 
@@ -16,9 +11,9 @@
 
 class ViCaRS;
 
-class EqnSolver {
+class SimEquations {
 public:
-	virtual ~EqnSolver(void) {};
+	virtual ~SimEquations(void) {};
 	virtual int init(ViCaRS *sim) = 0;
 	virtual unsigned int num_equations(void) const = 0;
 	virtual unsigned int num_outputs(void) const = 0;
@@ -36,7 +31,7 @@ public:
 	virtual bool values_valid(ViCaRS *sim, N_Vector y) = 0;
 };
 
-class OrigEqns : public EqnSolver {
+class OrigEqns : public SimEquations {
 private:
 	LogSpline				log_approx;
 	
@@ -82,7 +77,7 @@ public:
 	}
 };
 
-class SimpleEqns : public EqnSolver {
+class SimpleEqns : public SimEquations {
 private:
 	// Phase of each element
 	std::map<BlockGID, int> _phase;

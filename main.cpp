@@ -1,3 +1,4 @@
+
 #include "RateState.h"
 
 #define NBLOCKS			1
@@ -48,7 +49,8 @@ int main(int argc, char **argv)
 	}
 	
 	// Whether to use simple (Dieterich-style) equations or full rate/state equations
-	EqnSolver		*eqns;
+	SimEquations		*eqns;
+	CVODESolver			*solver;
 	
 #ifdef USE_SIMPLIFIED_EQNS
 	eqns = new SimpleEqns;
@@ -56,14 +58,16 @@ int main(int argc, char **argv)
 	eqns = new OrigEqns;
 #endif
 	
+	solver = new CVODESolver(eqns);
+	
 	// Set the threshold for a rupture to be 0.1 m/s
 	sim.set_rupture_threshold(0.1);
 	
 	// Set the timesteps for each solver (in seconds)
-	sim.set_timesteps(1, 0.1);
-	sim.set_timesteps(86400, 0.5);
+	solver->set_timesteps(1, 0.1);
+	solver->set_timesteps(86400, 0.5);
 	
-	res = sim.init(eqns);
+	res = sim.init(solver);
 	if (res) {
 		std::cerr << "Initializing error." << std::endl;
 		exit(-1);
@@ -87,7 +91,7 @@ int main(int argc, char **argv)
 	sim.write_summary_header(stderr);
 	sim.write_summary(stderr);
 	
-	sim.print_stats();
+	sim.solver()->print_stats();
 	
 	sim.cleanup();
 }
