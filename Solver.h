@@ -80,6 +80,12 @@ public:
 };
 
 class RK4Solver : public Solver {
+private:
+    unsigned int        _num_evals;
+    N_Vector            k1, k2, k3, k4, in_vals, subsum;
+    
+public:
+    RK4Solver(SimEquations *eqns) : Solver(eqns) {};
 	virtual int init_solver(ViCaRS *sim);
 	virtual int advance(ViCaRS *sim, N_Vector vars, realtype target_time, realtype &finish_time);
 	virtual void print_stats(void);

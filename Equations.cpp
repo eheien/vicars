@@ -7,6 +7,7 @@
 
 bool OrigEqns::values_valid(ViCaRS *sim, N_Vector y) {
 	int			local_fail;
+    realtype    v, h;
 	BlockMap::const_iterator	it;
 	
 	if (_use_log_spline) return true;
@@ -14,7 +15,9 @@ bool OrigEqns::values_valid(ViCaRS *sim, N_Vector y) {
 	// Check if any velocity or theta values are below 0
 	local_fail = 0;
 	for (it=sim->begin();it!=sim->end();++it) {
-		if (Vth(y,it->first) <= 0 || Hth(y,it->first) <= 0) {
+        h = Hth(y,it->first);
+        v = Vth(y,it->first);
+		if (v <= 0 || h <= 0 || isnan(v) || isnan(h)) {
 			local_fail = 1;
 			break;
 		}
@@ -143,7 +146,7 @@ int OrigEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 		h = Hth(y,i_gid);
 		
 		friction_force = sim->param_k(i_gid)*F(sim->param_a(i_gid),sim->param_b(i_gid),v,h);
-		
+        
 		// calculate interaction force
 		spring_force = 0;
 		for (jt=sim->begin();jt!=sim->end();++jt) {
