@@ -34,12 +34,13 @@ public:
 class OrigEqns : public SimEquations {
 private:
 	LogSpline				log_approx;
+    BasicSpline             blog;
 	
 	// Whether to use the log spline approximation or not
 	bool                    _use_log_spline;
 	
 public:
-	OrigEqns(void) : log_approx(-40, 2, 1e12, 1e5, 15), _use_log_spline(false) {};
+	OrigEqns(void) : log_approx(-40, 2, 1e12, 1, 15), _use_log_spline(true), blog(1e-5) {};
 	virtual ~OrigEqns(void) {};
 	
 	virtual int init(ViCaRS *sim);
@@ -63,17 +64,17 @@ public:
 	realtype &Hth(N_Vector y, BlockGID bnum) { return NV_Ith_S(y,bnum*3+2); };
 	
 	realtype log_func(realtype x) const {
-		if (_use_log_spline) return log_approx(x);
+		if (_use_log_spline) return blog(x);
 		else return log(x);
 	}
 	
 	realtype log_deriv(realtype x) const {
-		if (_use_log_spline) return log_approx.deriv(x);
+		if (_use_log_spline) return blog.dx(x);
 		else return 1/x;
 	}
 	
 	realtype F(realtype a, realtype b, realtype v, realtype h) {
-		return 1 + a*log_func(v) + b*log_func(h);
+		return 1 + (v < 0 ? -1 : 1)*a*log_func(v) + b*log_func(h);
 	}
 };
 

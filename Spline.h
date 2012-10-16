@@ -15,6 +15,33 @@
 //#define DEBUG_SPLINE
 //#define OUTPUT_SPLINE
 
+class BasicSpline {
+private:
+	gsl_interp_accel	*acc;
+	gsl_spline			*spline;
+	double				transition_value;
+	
+public:
+	BasicSpline(double trans_value);
+	~BasicSpline(void);
+	
+	double operator()(double x) const {
+		if (fabs(x) < transition_value) {
+			return gsl_spline_eval(spline, x, acc);
+		} else {
+			return log(fabs(x));
+		}
+	}
+	
+	double dx(double x) const {
+		if (fabs(x) < transition_value) {
+			return gsl_spline_eval_deriv(spline, x, acc);
+		} else {
+			return 1/x;
+		};
+	}
+};
+
 class LogSpline {
 private:
 	gsl_interp_accel *acc;

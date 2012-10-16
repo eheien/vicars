@@ -2,7 +2,8 @@
 #include "RateState.h"
 
 #define NBLOCKS			1
-//#define USE_SIMPLIFIED_EQNS
+#define USE_CVODE
+#define USE_SIMPLIFIED_EQNS
 
 int main(int argc, char **argv)
 {
@@ -13,6 +14,7 @@ int main(int argc, char **argv)
 	int				res;
 	
 	realtype		x_0, v_0, h_0, x_err, v_err, h_err;
+	realtype		sim_end;
 	double			side, A, v_p, mu_0, m, k, tau, g, L, rho, a, b;
 	
 	side = 1;					// meters
@@ -36,8 +38,8 @@ int main(int argc, char **argv)
 	
 	//param_a = 0.0625;
 	//param_b = 0.125;
-	//param_k = 20;
-	//param_r = 1e-5;
+	param_k = 20;
+	param_r = 1e-5;
 	std::cerr << param_a << " " << param_b << " " << param_k << " " << param_r << std::endl;
 	
 	for (i=0;i<NBLOCKS;++i) {
@@ -51,24 +53,45 @@ int main(int argc, char **argv)
 	
 	// Whether to use simple (Dieterich-style) equations or full rate/state equations
 	SimEquations		*eqns;
+	bool				use_simplified = true, use_cvode = true;
 	
-#ifdef USE_SIMPLIFIED_EQNS
-	eqns = new SimpleEqns;
-#else
-	eqns = new OrigEqns;
-#endif
-	
-	CVODESolver *solver = new CVODESolver(eqns);
-	//RK4Solver *solver = new RK4Solver(eqns);
+	if (use_simplified) {
+		eqns = new SimpleEqns;
+		sim_end = 10*365.25*86400;
+		if (use_cvode) {
+			CVODESolver *solver_phase0 = new CVODESolver(eqns);
+			CVODESolver *solver_phase1 = new CVODESolver(eqns);
+			CVODESolver *solver_phase2 = new CVODESolver(eqns);
+			solver_phase0->set_timestep(86400);
+			solver_phase1->set_timestep(60);
+			solver_phase2->set_timestep(1);
+			
+			sim.add_solver(solver_phase0);
+			sim.add_solver(solver_phase1);
+			sim.add_solver(solver_phase2);
+		} else {
+			// RK4
+		}
+	} else {
+		eqns = new OrigEqns;
+		sim_end = 1000;
+		if (use_cvode) {
+			CVODESolver *solver_long = new CVODESolver(eqns);
+			CVODESolver *solver_rupture = new CVODESolver(eqns);
+			solver_long->set_timestep(1);
+			solver_rupture->set_timestep(0.1);
+			
+			sim.add_solver(solver_long);
+			sim.add_solver(solver_rupture);
+		} else {
+			// RK4
+		}
+	}
 	
 	// Set the threshold for a rupture to be 0.1 m/s
 	sim.set_rupture_threshold(0.1);
 	
-	// Set the timesteps for each solver (in seconds)
-	solver->set_timesteps(1, 0.1);
-	solver->set_timesteps(86400, 0.5);
-	
-	res = sim.init(solver);
+	res = sim.init(eqns);
 	if (res) {
 		std::cerr << "Initializing error." << std::endl;
 		exit(-1);
@@ -76,7 +99,7 @@ int main(int argc, char **argv)
 	
 	fp = fopen("out.txt", "w");
 	sim.write_header(fp);
-	while(sim.get_time() <= 1000) {
+	while(sim.get_time() <= sim_end) {
 		res = sim.advance();
 		if (res != 0) {
 			std::cerr << "Err " << res << std::endl;
@@ -92,7 +115,7 @@ int main(int argc, char **argv)
 	sim.write_summary_header(stderr);
 	sim.write_summary(stderr);
 	
-	sim.solver()->print_stats();
+	//sim.solver()->print_stats();
 	
 	sim.cleanup();
 }

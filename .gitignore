@@ -23,3 +23,7 @@ m_plot.p
 *.xcuserstate
 
 ViCaRS.xcodeproj/project.xcworkspace/xcuserdata/eheien.xcuserdatad/UserInterfaceState.xcuserstate
+
+*.o
+
+quakelib

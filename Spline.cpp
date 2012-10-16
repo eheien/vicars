@@ -1,4 +1,47 @@
 #include "Spline.h"
+#include <map>
+
+BasicSpline::BasicSpline(double trans_value) : transition_value(trans_value) {
+	std::map<double, double> v;
+	std::map<double, double>::const_iterator	it;
+	unsigned int	i, num_steps = 20;
+	double			step, val, lower_bound = 1e-10;
+	
+	step = pow((trans_value/lower_bound),1.0/num_steps);
+	for (val=trans_value,i=0;i<num_steps;i++,val/=step) {
+		v[val] = v[-val] = log(val);
+	}
+	v[0] = log(lower_bound);
+	
+	size_t num_points = v.size();
+	double *v_arr = new double[num_points], *logv_arr = new double[num_points];
+	for (i=0,it=v.begin();it!=v.end();++it,++i) {
+		v_arr[i] = it->first;
+		logv_arr[i] = it->second;
+	}
+	
+	acc = gsl_interp_accel_alloc ();
+	spline = gsl_spline_alloc (gsl_interp_akima, num_points);
+	gsl_spline_init (spline, v_arr, logv_arr, num_points);
+	
+#ifdef OUTPUT_SPLINE
+	std::ofstream log_sample_points;
+	unsigned int sample_steps = 250;
+	step = pow((trans_value/lower_bound),1.0/sample_steps);
+	log_sample_points.open ("log_sample_points.txt");
+	for (val=trans_value,i=0;i<sample_steps;i++,val/=step) {
+		log_sample_points << val << " " << gsl_spline_eval(spline, val, acc) << " " << log(fabs(val)) << std::endl;
+	}
+	log_sample_points.close();
+#endif
+	delete[] v_arr;
+	delete[] logv_arr;
+}
+
+BasicSpline::~BasicSpline(void) {
+	gsl_spline_free (spline);
+	gsl_interp_accel_free (acc);
+}
 
 LogSpline::LogSpline(double _log_min, double _poly_pow, double _poly_c, double _log_takeover, int _npoints_poly) : log_min(_log_min), poly_pow(_poly_pow), poly_c(_poly_c), log_takeover(_log_takeover), npoints_poly(_npoints_poly) {
 	

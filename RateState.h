@@ -1,4 +1,4 @@
-#include "Matrix.h"
+#include "QuakeLib.h"
 #include "Spline.h"
 #include "Equations.h"
 #include "Solver.h"
@@ -30,7 +30,10 @@ private:
 	realtype				_cur_time;
 	
 	// Generic solver class
-	Solver					*_solver;
+	std::vector<Solver*>	_solvers;
+	unsigned int			_cur_solver;
+	
+	SimEquations			*_eqns;
 	
 	// When any block in the system reaches this speed, the system is considered to be in rupture mode
 	realtype                _rupture_threshold;
@@ -38,7 +41,7 @@ private:
 	// Whether to use the slowness law (var = true) or slip law (var = false)
 	bool                    _use_slowness_law;
 	
-	VCDenseStdStraight greens_matrix;
+	quakelib::HierarchicalMatrix<double> *greens_matrix;
 	int fill_greens_matrix(void);
 	
 public:
@@ -57,11 +60,11 @@ public:
 	
 	int add_block(const BlockGID &id, const BlockData &block_data);
 	
-	int init(Solver *solver);
+	int init(SimEquations *eqns);
 	int advance(void);
 	void cleanup(void);
-	
-	Solver *solver(void) { return _solver; };
+	void add_solver(Solver *solver) { _solvers.push_back(solver); };
+	SimEquations *equations(void) { return _eqns; };
 	
 	realtype G(void) const { return _G; };
 	

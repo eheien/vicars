@@ -33,29 +33,23 @@ public:
 class Solver {
 protected:
 	SimEquations				*_eqns;
+    double                      _timestep;
     
 public:
     Solver(SimEquations *eqns) : _eqns(eqns) {};
-    ~Solver(void) {};
+    virtual ~Solver(void) {};
 	virtual int init_solver(ViCaRS *sim) = 0;
-	virtual int advance(ViCaRS *sim, N_Vector vars, realtype target_time, realtype &finish_time) = 0;
+	virtual int reinit_solver(realtype cur_time, N_Vector vars) = 0;
+	virtual int advance(ViCaRS *sim, N_Vector vars, realtype target_time, realtype &finish_time, bool &next_solver) = 0;
 	virtual void print_stats(void) = 0;
     
-    SimEquations *equations() const { return _eqns; };
+    void set_timestep(double new_timestep) { _timestep = new_timestep; };
 };
 
 class CVODESolver : public Solver {
 private:
-	// CVODE solvers
-	void					*_solver_long, *_solver_rupture;
-	
-	// Pointer to the currently active solver
-	void					*_current_solver;
-
-	realtype                _rupture_timestep, _long_timestep;
-	
-	// Whether the simulation is in rupture mode (var = true) or long term mode (var = false)
-	bool                    _in_rupture;
+	// Pointer to the relevant solver
+	void					*_solver;
 	
 	// Vector of initial values, absolute tolerances, and calculated values arranged as follows:
 	// [Block1 X, Block1 V, Block1 H, Block2 X, Block2 X, Block2 H, ...]
@@ -63,17 +57,22 @@ private:
     
 	realtype				_rel_tol;
 	
-	// Statistics on number of solver steps for long term and rupture solvers
-	SolverStats             _stats_long, _stats_rupture;
+	// Statistics on number of solver steps
+	SolverStats             _stats;
     
     int init_cvode_solver(void **created_solver, int rootdir, ViCaRS *sim);
     
 public:
-    CVODESolver(SimEquations *eqns) : Solver(eqns), _solver_long(NULL), _solver_rupture(NULL), _current_solver(NULL) {};
+    CVODESolver(SimEquations *eqns) : Solver(eqns), _solver(NULL) {};
     ~CVODESolver(void);
-	void set_timesteps(realtype long_term_step, realtype rupture_step) { _long_timestep = long_term_step; _rupture_timestep = rupture_step; };
+	virtual int reinit_solver(realtype cur_time, N_Vector vars) {
+        int flag;
+        flag = CVodeReInit(_solver, cur_time, vars);
+        if (flag != CV_SUCCESS) return 1;
+        return 0;
+    };
 	virtual int init_solver(ViCaRS *sim);
-	virtual int advance(ViCaRS *sim, N_Vector vars, realtype target_time, realtype &finish_time);
+	virtual int advance(ViCaRS *sim, N_Vector vars, realtype target_time, realtype &finish_time, bool &next_solver);
     
 	void update_stats(void *solver, SolverStats &stats);
 	virtual void print_stats(void);
@@ -87,7 +86,8 @@ private:
 public:
     RK4Solver(SimEquations *eqns) : Solver(eqns) {};
 	virtual int init_solver(ViCaRS *sim);
-	virtual int advance(ViCaRS *sim, N_Vector vars, realtype target_time, realtype &finish_time);
+	virtual int reinit_solver(realtype cur_time, N_Vector vars) {};
+	virtual int advance(ViCaRS *sim, N_Vector vars, realtype target_time, realtype &finish_time, bool &next_solver);
 	virtual void print_stats(void);
 };
 

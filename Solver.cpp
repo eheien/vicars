@@ -4,6 +4,7 @@
 int RK4Solver::init_solver(ViCaRS *sim) {
 	BlockMap::const_iterator	it;
 	BlockGID		gid;
+    N_Vector        temp_tols;
     
     _num_evals = 0;
     
@@ -13,23 +14,28 @@ int RK4Solver::init_solver(ViCaRS *sim) {
     k4 = N_VClone(sim->vars());
     in_vals = N_VClone(sim->vars());
     subsum = N_VClone(sim->vars());
+    temp_tols = N_VClone(sim->vars());
 	
 	for (it=sim->begin();it!=sim->end();++it) {
 		gid = it->first;
-		_eqns->init_block(gid, it->second, sim->vars(), NULL);
+		_eqns->init_block(gid, it->second, sim->vars(), temp_tols);
 	}
+    
+    N_VDestroy_Serial(temp_tols);
     
     return 0;
 }
 
-int RK4Solver::advance(ViCaRS *sim, N_Vector vars, realtype target_time, realtype &finish_time) {
+int RK4Solver::advance(ViCaRS *sim, N_Vector vars, realtype target_time, realtype &finish_time, bool &next_solver) {
     realtype        t, dt;
     int             res;
+    
+    next_solver = 0;
     
     if (!_eqns->values_valid(sim, vars)) return 1;
     
     t = target_time;
-    dt = 1e-6;
+    dt = _timestep;
     
     // Calculate k1 = dt * f(y)
     _num_evals++;
@@ -59,17 +65,17 @@ int RK4Solver::advance(ViCaRS *sim, N_Vector vars, realtype target_time, realtyp
     N_VScale(dt, k4, k4);
     
     // y_{n+1} = y_n + 1/6 * (k1+2k2+2k3+k4)
-    std::cerr << "v: " << NV_Ith_S(vars,1) << " h: " << NV_Ith_S(vars,2) << std::endl;
-    std::cerr << "dv: " << NV_Ith_S(k1,1) << " dh: " << NV_Ith_S(k1,2) << std::endl;
-    std::cerr << "dv: " << NV_Ith_S(k2,1) << " dh: " << NV_Ith_S(k2,2) << std::endl;
-    std::cerr << "dv: " << NV_Ith_S(k3,1) << " dh: " << NV_Ith_S(k3,2) << std::endl;
-    std::cerr << "dv: " << NV_Ith_S(k4,1) << " dh: " << NV_Ith_S(k4,2) << std::endl;
+    //std::cerr << "v: " << NV_Ith_S(vars,1) << " h: " << NV_Ith_S(vars,2) << std::endl;
+    //std::cerr << "dv: " << NV_Ith_S(k1,1) << " dh: " << NV_Ith_S(k1,2) << std::endl;
+    //std::cerr << "dv: " << NV_Ith_S(k2,1) << " dh: " << NV_Ith_S(k2,2) << std::endl;
+    //std::cerr << "dv: " << NV_Ith_S(k3,1) << " dh: " << NV_Ith_S(k3,2) << std::endl;
+    //std::cerr << "dv: " << NV_Ith_S(k4,1) << " dh: " << NV_Ith_S(k4,2) << std::endl;
     N_VLinearSum(1, k1, 2, k2, subsum);
     N_VLinearSum(1, subsum, 2, k3, subsum);
     N_VLinearSum(1, subsum, 1, k4, subsum);
     N_VLinearSum(1, vars, 1.0/6.0, subsum, vars);
     
-    std::cerr << "v: " << NV_Ith_S(vars,1) << " h: " << NV_Ith_S(vars,2) << std::endl;
+    //std::cerr << "x: " << NV_Ith_S(vars,0) << " v: " << NV_Ith_S(vars,1) << " h: " << NV_Ith_S(vars,2) << std::endl;
     
     finish_time = target_time + dt;
     
@@ -84,9 +90,7 @@ CVODESolver::~CVODESolver(void) {
 	N_VDestroy_Serial(_abs_tol);
     
 	// Free integrator memory
-	if (_solver_long) CVodeFree(&_solver_long);
-	// Free integrator memory
-	if (_solver_rupture) CVodeFree(&_solver_rupture);
+	if (_solver) CVodeFree(&_solver);
 }
 
 int CVODESolver::init_solver(ViCaRS *sim) {
@@ -94,10 +98,8 @@ int CVODESolver::init_solver(ViCaRS *sim) {
 	BlockMap::const_iterator	it;
 	BlockGID		gid;
 	
-	_in_rupture = false;
-	
 	// Initialize variables and tolerances
-	_rel_tol = RCONST(1.0e-7);
+	_rel_tol = RCONST(1.0e-6);
 	_abs_tol = N_VNew_Serial(sim->num_global_blocks()*_eqns->num_equations());
 	if (_abs_tol == NULL) return 1;
 	
@@ -106,23 +108,11 @@ int CVODESolver::init_solver(ViCaRS *sim) {
 		_eqns->init_block(gid, it->second, sim->vars(), _abs_tol);
 	}
     
-	// Initialize the long term solver
-	rootdir = 1;
-	flag = init_cvode_solver(&_solver_long, rootdir, sim);
+	// Initialize the solver with a root finder
+	rootdir = 0;
+	flag = init_cvode_solver(&_solver, rootdir, sim);
 	if (flag) return flag;
 	
-	// And the rupture solver
-	rootdir = -1;
-	flag = init_cvode_solver(&_solver_rupture, rootdir, sim);
-	if (flag) return flag;
-	
-	// Set the current solver to be the long term
-	_current_solver = _solver_long;
-	
-	// Init CVodes structures
-	flag = _eqns->init(sim);
-	if (flag) return flag;
-    
     return 0;
 }
 
@@ -168,9 +158,9 @@ int CVODESolver::init_cvode_solver(void **created_solver, int rootdir, ViCaRS *s
 	
 	// Set maximum number of steps per solver iteration
 	// This should be higher if the time step is less frequent or tolerance is lowered
-	flag = CVodeSetMaxNumSteps(solver, 1e7);
+	flag = CVodeSetMaxNumSteps(solver, 1e5);
 	if (flag != CV_SUCCESS) return 1;
-	
+    
 	// Set the Jacobian x vector function
 	if (_eqns->has_jacobian()) {
 		flag = CVSpilsSetJacTimesVecFn(solver, jacobian_times_vector);
@@ -182,34 +172,22 @@ int CVODESolver::init_cvode_solver(void **created_solver, int rootdir, ViCaRS *s
 	return 0;
 }
 
-int CVODESolver::advance(ViCaRS *sim, N_Vector vars, realtype target_time, realtype &finish_time) {
+int CVODESolver::advance(ViCaRS *sim, N_Vector vars, realtype target_time, realtype &finish_time, bool &next_solver) {
 	int	flag;
-	realtype tstep;
 	
-	if (_in_rupture) tstep = _rupture_timestep;
-	else tstep = _long_timestep;
-	
-	flag = CVode(_current_solver, target_time+tstep, vars, &finish_time, CV_NORMAL);
+    next_solver = 0;
+    
+	flag = CVode(_solver, target_time+_timestep, vars, &finish_time, CV_NORMAL);
 	if (flag == CV_SUCCESS) {
 		return 0;
 	} else if (flag == CV_ROOT_RETURN) {
 		// Update the stats for each solver
-		update_stats(_solver_long, _stats_long);
-		update_stats(_solver_rupture, _stats_rupture);
-		
-        // Change the current solver
-		if (_in_rupture) _current_solver = _solver_long;
-		else _current_solver = _solver_rupture;
-		
-		// Reinit both solvers
-		flag = CVodeReInit(_solver_long, finish_time, vars);
-		if (flag != CV_SUCCESS) return 1;
-		flag = CVodeReInit(_solver_rupture, finish_time, vars);
-		if (flag != CV_SUCCESS) return 1;
-		_in_rupture = !_in_rupture;
+		update_stats(_solver, _stats);
 		
 		_eqns->handle_mode_change(sim, finish_time, vars);
 		
+        next_solver = 1;
+        
 		return 0;
 	} else return flag;
 }
@@ -237,24 +215,21 @@ void CVODESolver::update_stats(void *solver, SolverStats &stats) {
 }
 
 void CVODESolver::print_stats(void) {
-    // Kludgy design, move this to somewhere where it will only be called once even if print_stats is called repeatedly
-    // Otherwise we'll get double counts of operations
-    update_stats(_solver_rupture, _stats_rupture);
-    update_stats(_solver_long, _stats_long);
+    update_stats(_solver, _stats);
     
-	printf("\nSolver Statistics\t\tLong Term\tRupture\n");
-	printf("NumSteps\t\t\t\t%-6ld\t\t%-6ld\n", _stats_long._nst, _stats_rupture._nst);
-	printf("NumRhsEvals\t\t\t\t%-6ld\t\t%-6ld\n", _stats_long._nfe, _stats_rupture._nfe);
-	printf("NumErrTestFails\t\t\t%-6ld\t\t%-6ld\n", _stats_long._netf, _stats_rupture._netf);
-	printf("NumNonlinSolvIters\t\t%-6ld\t\t%-6ld\n", _stats_long._nni, _stats_rupture._nni);
-	printf("NumNonlinSolvConvFails\t%-6ld\t\t%-6ld\n", _stats_long._ncfn, _stats_rupture._ncfn);
-	printf("NumJtimesEvals\t\t\t%-6ld\t\t%-6ld\n", _stats_long._njtv, _stats_rupture._njtv);
-	printf("NumRootFindEvals\t\t%-6ld\t\t%-6ld\n", _stats_long._nge, _stats_rupture._nge);
+	printf("\nSolver Statistics\n");
+	printf("NumSteps\t\t\t\t%-6ld\n", _stats._nst);
+	printf("NumRhsEvals\t\t\t\t%-6ld\n", _stats._nfe);
+	printf("NumErrTestFails\t\t\t%-6ld\n", _stats._netf);
+	printf("NumNonlinSolvIters\t\t%-6ld\n", _stats._nni);
+	printf("NumNonlinSolvConvFails\t%-6ld\n", _stats._ncfn);
+	printf("NumJtimesEvals\t\t\t%-6ld\n", _stats._njtv);
+	printf("NumRootFindEvals\t\t%-6ld\n", _stats._nge);
 }
 
 int solve_odes(realtype t, N_Vector y, N_Vector ydot, void *user_data) {
 	ViCaRS			*sim = static_cast<ViCaRS*>(user_data);
-	SimEquations	*eqns = sim->solver()->equations();
+	SimEquations	*eqns = sim->equations();
 	
 	// Check if this set of input values is valid, if not return an error
 	if (!eqns->values_valid(sim, y)) return 1;
@@ -265,7 +240,7 @@ int solve_odes(realtype t, N_Vector y, N_Vector ydot, void *user_data) {
 
 int jacobian_times_vector(N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, void *user_data, N_Vector tmp) {
 	ViCaRS			*sim = static_cast<ViCaRS*>(user_data);
-	SimEquations	*eqns = sim->solver()->equations();
+	SimEquations	*eqns = sim->equations();
 	
 	// Solve the equations using the specified method and return the resulting error code
 	return eqns->jacobian_times_vector(sim, v, Jv, t, y, fy, tmp);
@@ -273,7 +248,7 @@ int jacobian_times_vector(N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vec
 
 int check_for_mode_change(realtype t, N_Vector y, realtype *gout, void *user_data) {
 	ViCaRS			*sim = static_cast<ViCaRS*>(user_data);
-	SimEquations	*eqns = sim->solver()->equations();
+	SimEquations	*eqns = sim->equations();
 	
 	// Solve the equations using the specified method and return the resulting error code
 	return eqns->check_for_mode_change(sim, t, y, gout);

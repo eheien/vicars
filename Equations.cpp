@@ -221,6 +221,7 @@ int SimpleEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 	// Calculate velocities and stresses on blocks
 	for (it=sim->begin();it!=sim->end();++it) {
 		gid = it->first;
+        std::cerr << gid << " time: " << t << " phase: " << _phase[gid];
 		switch (_phase[gid]) {
 			case 0:
 				_vel[gid] = 0;
@@ -237,10 +238,15 @@ int SimpleEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 			case 2:
 				_vel[gid] = _v_eq[gid];
 				_elem_stress[gid] = sigma_i*(mu_0+A*log(_vel[gid]/_v_star)+B*log(Hth(y,gid)/_theta_star));
+                if (isnan(_elem_stress[gid])) {
+                    std::cerr << _vel[gid] << " " << Hth(y,gid) << std::endl;
+                }
 				break;
 		}
 	}
 	
+    std::cerr << " vel: " << _vel[gid] << " stress: " << _elem_stress[gid] << std::endl;
+    
 	for (it=sim->begin();it!=sim->end();++it) {
 		gid = it->first;
 		
