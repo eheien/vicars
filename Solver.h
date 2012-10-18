@@ -60,10 +60,12 @@ private:
 	// Statistics on number of solver steps
 	SolverStats             _stats;
     
+    int                     _rootdir;
+    
     int init_cvode_solver(void **created_solver, int rootdir, ViCaRS *sim);
     
 public:
-    CVODESolver(SimEquations *eqns) : Solver(eqns), _solver(NULL) {};
+    CVODESolver(SimEquations *eqns) : Solver(eqns), _solver(NULL), _rootdir(0) {};
     ~CVODESolver(void);
 	virtual int reinit_solver(realtype cur_time, N_Vector vars) {
         int flag;
@@ -71,6 +73,7 @@ public:
         if (flag != CV_SUCCESS) return 1;
         return 0;
     };
+    virtual void set_rootdir(int new_rootdir) { _rootdir = new_rootdir; };
 	virtual int init_solver(ViCaRS *sim);
 	virtual int advance(ViCaRS *sim, N_Vector vars, realtype target_time, realtype &finish_time, bool &next_solver);
     

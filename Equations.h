@@ -40,7 +40,7 @@ private:
 	bool                    _use_log_spline;
 	
 public:
-	OrigEqns(void) : log_approx(-40, 2, 1e12, 1, 15), _use_log_spline(true), blog(1e-5) {};
+	OrigEqns(void) : log_approx(-40, 2, 1e12, 1, 15), _use_log_spline(false), blog(1e-5) {};
 	virtual ~OrigEqns(void) {};
 	
 	virtual int init(ViCaRS *sim);
@@ -86,7 +86,7 @@ private:
 	std::map<BlockGID, realtype>	_ss_stress, _stress_loading, _start_time, _vel, _v_eq;
 	std::map<BlockGID, realtype>	_base_stress, _elem_stress;
 	
-	realtype		mu_0, A, B, D_c, sigma_i, _v_star, _theta_star;
+	realtype		_theta_star;
 	
 public:
 	SimpleEqns(void) {};
@@ -105,10 +105,36 @@ public:
 	virtual int jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp) { return -1; };
 	virtual int check_for_mode_change(ViCaRS *sim, realtype t, N_Vector y, realtype *gout);
 	virtual void handle_mode_change(ViCaRS *sim, realtype t, N_Vector y);
-	virtual bool values_valid(ViCaRS *sim, N_Vector y) { return true; };
+	virtual bool values_valid(ViCaRS *sim, N_Vector y);
 	
 	realtype &Xth(N_Vector y, BlockGID bnum) { return NV_Ith_S(y,bnum*2+0); };
 	realtype &Hth(N_Vector y, BlockGID bnum) { return NV_Ith_S(y,bnum*2+1); };
+};
+
+class TullisEqns : public SimEquations {
+private:
+public:
+	TullisEqns(void) {};
+	virtual ~TullisEqns(void) {};
+	virtual int init(ViCaRS *sim);
+	virtual unsigned int num_equations(void) const { return 3; };
+	virtual unsigned int num_outputs(void) const { return 3; };
+	
+	virtual void init_block(BlockGID gid, const BlockData &block, N_Vector vars, N_Vector tols);
+	
+	virtual std::string var_name(unsigned int var_num) const;
+	virtual realtype var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y);
+	
+	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot);
+	virtual bool has_jacobian(void) { return false; };
+	virtual int jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp) { return -1; };
+	virtual int check_for_mode_change(ViCaRS *sim, realtype t, N_Vector y, realtype *gout);
+	virtual void handle_mode_change(ViCaRS *sim, realtype t, N_Vector y);
+	virtual bool values_valid(ViCaRS *sim, N_Vector y);
+	
+	realtype &Xth(N_Vector y, BlockGID bnum) { return NV_Ith_S(y,bnum*3+0); };
+	realtype &Vth(N_Vector y, BlockGID bnum) { return NV_Ith_S(y,bnum*3+1); };
+	realtype &Tauth(N_Vector y, BlockGID bnum) { return NV_Ith_S(y,bnum*3+2); };
 };
 
 #endif

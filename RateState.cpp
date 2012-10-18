@@ -1,9 +1,8 @@
 #include "RateState.h"
 
-ViCaRS::ViCaRS(unsigned int total_num_blocks) : _num_global_blocks(total_num_blocks)
+ViCaRS::ViCaRS(unsigned int total_num_blocks) : greens_matrix(total_num_blocks, total_num_blocks), _num_global_blocks(total_num_blocks)
 {
     _use_slowness_law = true;
-	_G = 3.0e10;
 }
 
 int ViCaRS::add_block(const BlockGID &id, const BlockData &block_data) {
@@ -62,7 +61,7 @@ void ViCaRS::cleanup(void) {
 	for (i=0;i<_solvers.size();++i) delete _solvers[i];
 }
 
-realtype ViCaRS::interaction(BlockGID i, BlockGID j) { return 0; /*greens_matrix->get(i,j);*/ };
+realtype ViCaRS::interaction(BlockGID i, BlockGID j) { return greens_matrix.val(i,j); };
 
 void ViCaRS::write_header(FILE *fp) {
 	BlockMap::const_iterator	it;
@@ -110,6 +109,7 @@ void ViCaRS::write_cur_data(FILE *fp) {
 	unsigned int				vnum;
 	
 	fprintf(fp, "%0.7e ", _cur_time);
+	//fprintf(fp, "%0.7e ", _cur_time/(365.25*86400));
 	for (it=_bdata.begin();it!=_bdata.end();++it) {
 		for (vnum=0;vnum<_eqns->num_outputs();++vnum) {
 			fprintf(fp, "%14.6e ", _eqns->var_value(this, vnum, it->first, _vars));
@@ -122,19 +122,18 @@ int ViCaRS::fill_greens_matrix(void) {
 	int i, j, r;
 	BlockMap::const_iterator	it, jt;
 	
-	double G = 3e10;
-	double L = 0.1;
-	double scale = 1e-9;
+	double G = params().G;
+	double L = params().side/2;
 	
 	for (it=_bdata.begin(); it != _bdata.end(); ++it) {
 		i = it->first;
 		for (jt=_bdata.begin(); jt != _bdata.end(); ++jt) {
 			j = jt->first;
-			/*if (i==j) { greens_matrix.setVal(i,j,scale*-0.53*G/L); }
+			if (i==j) { greens_matrix.setVal(i,j,0.53*G/L); }
 			else {
 				r = abs(i-j);
-				greens_matrix.setVal(i,j,scale*0.98*G/(L*pow(((r/L)-1),3)));
-			}*/
+				greens_matrix.setVal(i,j,0.098*G/(L*pow(((r/L)-1),3)));
+			}
 		}
 	}
 	

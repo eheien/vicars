@@ -26,6 +26,28 @@ bool OrigEqns::values_valid(ViCaRS *sim, N_Vector y) {
 	return (!local_fail);
 }
 
+bool SimpleEqns::values_valid(ViCaRS *sim, N_Vector y) {
+	int			local_fail;
+    realtype    h;
+	BlockMap::const_iterator	it;
+	
+	// Check if any velocity or theta values are below 0
+	local_fail = 0;
+	for (it=sim->begin();it!=sim->end();++it) {
+        h = Hth(y,it->first);
+		if (h <= 0 || isnan(h)) {
+			local_fail = 1;
+			break;
+		}
+	}
+	
+	return (!local_fail);
+}
+
+bool TullisEqns::values_valid(ViCaRS *sim, N_Vector y) {
+	return true;
+}
+
 std::string OrigEqns::var_name(unsigned int var_num) const {
 	switch (var_num) {
 		case 0: return "X";
@@ -47,12 +69,34 @@ std::string SimpleEqns::var_name(unsigned int var_num) const {
 	}
 }
 
+std::string TullisEqns::var_name(unsigned int var_num) const {
+	switch (var_num) {
+		case 0: return "X";
+		case 1: return "V";
+		case 2: return "Tau";
+		default: throw std::exception();
+	}
+}
+
 realtype OrigEqns::var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y) {
 	switch (var_num) {
 		case 0: return Xth(y, gid);
 		case 1: return Vth(y, gid);
 		case 2: return Hth(y, gid);
 		case 3: return F(sim->param_a(gid), sim->param_a(gid), Vth(y, gid), Hth(y, gid));
+		/*case 0: return Xth(y, gid)*sim->params().L;
+		case 1: return Vth(y, gid)*sim->params().v_ss;
+		case 2: return Hth(y, gid)*sim->params().L/sim->params().v_ss;
+		case 3: return F(sim->param_a(gid), sim->param_a(gid), Vth(y, gid), Hth(y, gid));*/
+		default: throw std::exception();
+	}
+}
+
+realtype TullisEqns::var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y) {
+	switch (var_num) {
+		case 0: return Xth(y, gid);
+		case 1: return Vth(y, gid);
+		case 2: return Tauth(y, gid);
 		default: throw std::exception();
 	}
 }
@@ -78,6 +122,16 @@ void OrigEqns::init_block(BlockGID gid, const BlockData &block, N_Vector vars, N
 	Hth(tols, gid) = block._tol_h;
 }
 
+void TullisEqns::init_block(BlockGID gid, const BlockData &block, N_Vector vars, N_Vector tols) {
+	Xth(vars, gid) = block._init_x;
+	Vth(vars, gid) = block._init_v;
+	Tauth(vars, gid) = block._init_h;
+	
+	Xth(tols, gid) = block._tol_x;
+	Vth(tols, gid) = block._tol_v;
+	Tauth(tols, gid) = block._tol_h;
+}
+
 void SimpleEqns::init_block(BlockGID gid, const BlockData &block, N_Vector vars, N_Vector tols) {
 	_start_time[gid] = 0;
 	
@@ -92,29 +146,22 @@ int OrigEqns::init(ViCaRS *sim) {
 	return 0;
 }
 
+int TullisEqns::init(ViCaRS *sim) {
+	return 0;
+}
+
 int SimpleEqns::init(ViCaRS *sim) {
 	BlockMap::const_iterator	it,jt;
-	realtype					v_ss, sum_load, W, beta, delta_tau;
+	realtype					sum_load, delta_tau;
 	
-	mu_0 = 0.5;
-	A = 0.005;
-	B = 0.015;
-	D_c = 0.01*1e-3;
-	sigma_i = 15e6;						// Pascals
-	_v_star = 1.0/(1.0e5*365.25*86400);	// 1 meter/1e5 years in m/s
-	_theta_star = D_c/_v_star;
-	
-	v_ss = 1.0/(1.0e2*365.25*86400);	// 1 cm/year in m/s
-	W = 10;
-	
-	beta = 5000;		// meters/second
-	delta_tau = 1000;
+	_theta_star = sim->params().D_c/sim->params().V_star;
 	
 	for (it=sim->begin();it!=sim->end();++it) {
 		_phase[it->first] = 0;				// Start all blocks in phase 0
-		_ss_stress[it->first] = sigma_i*(mu_0+(A-B)*log(v_ss/_v_star));
+		_ss_stress[it->first] = sim->params().sigma*(sim->params().mu_0+(sim->params().A-sim->params().B)*log(sim->params().v_ss/sim->params().V_star));
+        std::cerr << _ss_stress[it->first] << std::endl;
 		delta_tau = _ss_stress[it->first];
-		_v_eq[it->first] = 2*beta*delta_tau/sim->G();
+		_v_eq[it->first] = 2*sim->params().beta*delta_tau/sim->params().G;
 		_base_stress[it->first] = _elem_stress[it->first] = 0;
 		_start_time[it->first] = 0;
 	}
@@ -122,10 +169,11 @@ int SimpleEqns::init(ViCaRS *sim) {
 	for (it=sim->begin();it!=sim->end();++it) {
 		sum_load = 0;
 		for (jt=sim->begin();jt!=sim->end();++jt) {
-			sum_load += v_ss*sim->interaction(it->first, jt->first);
+			sum_load += sim->interaction(it->first, jt->first);
 		}
-		sum_load += v_ss*sim->G()/W;
-		_stress_loading[it->first] = sum_load;
+		sum_load += sim->params().G/sim->params().W;
+		_stress_loading[it->first] = sim->params().v_ss*sum_load;
+        std::cerr << sum_load << " " << _stress_loading[it->first] << std::endl;
 	}
 	
 	return 0;
@@ -180,6 +228,19 @@ int OrigEqns::check_for_mode_change(ViCaRS *sim, realtype t, N_Vector y, realtyp
 	return 0;
 }
 
+// Function to determine when the simulation moves into rupture or long term mode
+// TODO: parallelize this function
+int TullisEqns::check_for_mode_change(ViCaRS *sim, realtype t, N_Vector y, realtype *gout) {
+	BlockMap::const_iterator	it;
+	realtype			local_max = -DBL_MAX;
+	
+	for (it=sim->begin();it!=sim->end();++it) local_max = fmax(local_max, Vth(y,it->first));
+	
+	gout[0] = local_max - sim->rupture_threshold();
+	
+	return 0;
+}
+
 // Computes Jv = Jacobian times v in order to improve convergence for Krylov subspace solver
 int OrigEqns::jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp) {
 	BlockMap::const_iterator	it;
@@ -221,7 +282,6 @@ int SimpleEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 	// Calculate velocities and stresses on blocks
 	for (it=sim->begin();it!=sim->end();++it) {
 		gid = it->first;
-        std::cerr << gid << " time: " << t << " phase: " << _phase[gid];
 		switch (_phase[gid]) {
 			case 0:
 				_vel[gid] = 0;
@@ -229,23 +289,20 @@ int SimpleEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 				break;
 			case 1:
 				K = -sim->interaction(gid, gid)+1;	// K_T = 1 arbitrarily, need to change this
-				H = B/D_c-K/sigma_i;
+				H = sim->params().B/sim->params().D_c-K/sim->params().sigma;
 				tau_dot = _ss_stress[gid];
-				q = 1.0/((1.0/v_0+H*sigma_i/tau_dot)*exp(-tau_dot*(t-_start_time[gid])/(A*sigma_i)) - H*sigma_i/tau_dot);
+				q = 1.0/((1.0/v_0+H*sim->params().sigma/tau_dot)*exp(-tau_dot*(t-_start_time[gid])/(sim->params().A*sim->params().sigma)) - H*sim->params().sigma/tau_dot);
 				_vel[gid] = q;
-				_elem_stress[gid] = sigma_i*(mu_0+A*log(_vel[gid]/_v_star)+B*log(Hth(y,gid)/_theta_star));
+				_elem_stress[gid] = sim->params().sigma*(sim->params().mu_0+sim->params().A*log(_vel[gid]/sim->params().V_star)+sim->params().B*log(Hth(y,gid)/_theta_star));
 				break;
 			case 2:
 				_vel[gid] = _v_eq[gid];
-				_elem_stress[gid] = sigma_i*(mu_0+A*log(_vel[gid]/_v_star)+B*log(Hth(y,gid)/_theta_star));
-                if (isnan(_elem_stress[gid])) {
-                    std::cerr << _vel[gid] << " " << Hth(y,gid) << std::endl;
-                }
+				_elem_stress[gid] = sim->params().sigma*(sim->params().mu_0+sim->params().A*log(_vel[gid]/sim->params().V_star)+sim->params().B*log(Hth(y,gid)/_theta_star));
 				break;
 		}
 	}
 	
-    std::cerr << " vel: " << _vel[gid] << " stress: " << _elem_stress[gid] << std::endl;
+    std::cerr << gid << " time: " << t/(365.25*86400) << " phase: " << _phase[gid] << " H: " << Hth(y,gid) << " vel: " << _vel[gid] << " stress: " << _elem_stress[gid] << std::endl;
     
 	for (it=sim->begin();it!=sim->end();++it) {
 		gid = it->first;
@@ -261,7 +318,7 @@ int SimpleEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
 				break;
 			case 1:
 			case 2:
-				Hth(ydot,gid) = 1.0-h*_vel[gid]/D_c;
+				Hth(ydot,gid) = 1.0-h*_vel[gid]/sim->params().D_c;
 				break;
 			default:
 				return -1;
@@ -306,9 +363,13 @@ int SimpleEqns::check_for_mode_change(ViCaRS *sim, realtype t, N_Vector y, realt
 void OrigEqns::handle_mode_change(ViCaRS *sim, realtype t, N_Vector y) {
 }
 
+void TullisEqns::handle_mode_change(ViCaRS *sim, realtype t, N_Vector y) {
+}
+
 void SimpleEqns::handle_mode_change(ViCaRS *sim, realtype t, N_Vector y) {
 	BlockMap::const_iterator it;
 	BlockGID gid;
+    bool        all_phase_0 = true;
 	
 	for (it=sim->begin();it!=sim->end();++it) {
 		gid = it->first;
@@ -322,6 +383,61 @@ void SimpleEqns::handle_mode_change(ViCaRS *sim, realtype t, N_Vector y) {
 			_phase[gid] = 0;
 			_start_time[gid] = t;
 		}
+        if (_phase[gid] != 0) all_phase_0 = false;
 	}
+}
+
+
+int TullisEqns::solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot) {
+	realtype		friction_force, spring_force, x, v, tau, interact, trm, exptrm, stauss;
+    realtype        arg, vs, vpl, scab, ca, cb, coefv, denom, coeft1, coeft2, rigid, strs, xldis;
+	unsigned int	i_gid, j_gid;
+	BlockMap::const_iterator	it,jt;
+	
+	// Share X values over all processors to enable correct interaction between blocks
+	// TODO: only share X values with processors that need them
+	
+    vs = 3.0e3; // shear wave speed
+    
+    vpl = sim->params().v_ss;
+    ca = sim->params().A;
+    cb = sim->params().B;
+    xldis = sim->params().D_c;
+    scab = ca - cb;
+    
+	for (it=sim->begin();it!=sim->end();++it) {
+		i_gid = it->first;
+		x = Xth(y,i_gid);
+		v = Vth(y,i_gid);
+		tau = Tauth(y,i_gid);
+		
+		// calculate interaction force
+		spring_force = 0;
+		for (jt=sim->begin();jt!=sim->end();++jt) {
+			j_gid = jt->first;
+			interact = sim->interaction(i_gid,j_gid);
+			if (interact > 0) {
+				spring_force += interact*(x-Xth(y,j_gid));
+			}
+		}
+		spring_force = 0;
+		
+        strs = 0;
+        rigid = 3.0e4;
+        denom = 2 * vs * ca + rigid * v;        // (m/s)*(N/m^2)+(N/m^2*m/s)=N/(m*s)
+        coefv = 2 * vs * v / denom;             // (m/s)*(m/s)/(N/(m*s))=(m^3/s^3)/N
+        coeft1 = 2 * vs * ca / denom;           // (m/s)*(N/m^2)/(N/(m*s))=unitless
+        coeft2 = rigid * v / denom;             // (N/m^2)*(m/s)/(N/(m*s))=unitless
+        
+		Xth(ydot,i_gid) = v;
+        arg = vpl/v;
+        stauss = -scab * log(arg);              // N/m^2
+        exptrm = exp(-(tau-stauss)/cb);         // unitless
+        trm = cb * v/xldis * (1-exptrm);        // (N/m^2)*(m/s)/
+		Vth(ydot,i_gid) = coefv * (strs + trm); // (m^3/s^3)/N*(N/m^2)=(m/s^3)
+        Tauth(ydot,i_gid) = coeft1*strs + coeft2*trm;
+	}
+	
+	return 0;
 }
 

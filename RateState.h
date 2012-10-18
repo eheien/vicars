@@ -14,18 +14,34 @@
 
 // Format of result vector: [x0, v0, h0, x1, v1, h1, ..., xn, vn, hn]
 
+class SimParams {
+public:
+    double                  V_star; // 
+	double                  G;		// shear modulus parameter, pascals
+	double                  D_c;    // characteristic slip, meters
+	double                  W;
+	double                  beta;   // shear wave speed, meters/second
+    double                  sigma;  // effective normal stress, pascals
+    double                  A;
+    double                  B;
+    double                  v_ss;   // steady state pulling speed, meters/second
+    double                  mu_0;   // nominal coefficient of friction
+    double                  side;   // side length, meters
+    double                  L;      // rate state elngth normalization
+};
+
 class ViCaRS {
 private:
 	unsigned int			_num_global_blocks;
 	unsigned int			_num_equations;
 	
+    SimParams               _params;
+    
 	// Vector of initial values, absolute tolerances, and calculated values arranged as follows:
 	// [Block1 X, Block1 V, Block1 H, Block2 X, Block2 X, Block2 H, ...]
 	N_Vector				_vars;
 	
 	BlockMap				_bdata;
-	
-	realtype				_G;		// shear modulus parameter
 	
 	realtype				_cur_time;
 	
@@ -41,7 +57,7 @@ private:
 	// Whether to use the slowness law (var = true) or slip law (var = false)
 	bool                    _use_slowness_law;
 	
-	quakelib::HierarchicalMatrix<double> *greens_matrix;
+	quakelib::DenseStdStraight<double> greens_matrix;
 	int fill_greens_matrix(void);
 	
 public:
@@ -60,13 +76,13 @@ public:
 	
 	int add_block(const BlockGID &id, const BlockData &block_data);
 	
+    SimParams &params(void) { return _params; };
+    
 	int init(SimEquations *eqns);
 	int advance(void);
 	void cleanup(void);
 	void add_solver(Solver *solver) { _solvers.push_back(solver); };
 	SimEquations *equations(void) { return _eqns; };
-	
-	realtype G(void) const { return _G; };
 	
 	realtype interaction(BlockGID a, BlockGID b);
 	realtype get_time(void) const { return _cur_time; };

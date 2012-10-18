@@ -94,7 +94,7 @@ CVODESolver::~CVODESolver(void) {
 }
 
 int CVODESolver::init_solver(ViCaRS *sim) {
-	int				flag, rootdir;
+	int				flag;
 	BlockMap::const_iterator	it;
 	BlockGID		gid;
 	
@@ -109,8 +109,7 @@ int CVODESolver::init_solver(ViCaRS *sim) {
 	}
     
 	// Initialize the solver with a root finder
-	rootdir = 0;
-	flag = init_cvode_solver(&_solver, rootdir, sim);
+	flag = init_cvode_solver(&_solver, _rootdir, sim);
 	if (flag) return flag;
 	
     return 0;
