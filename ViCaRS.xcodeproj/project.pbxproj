@@ -35,6 +35,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AA19A5F51631C1CF000AF19E /* Params.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Params.h; sourceTree = SOURCE_ROOT; };
 		AA7D241F162E1588001B45BF /* ViCaRS */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = ViCaRS; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA7D2430162E15C0001B45BF /* BlockData.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = BlockData.h; sourceTree = SOURCE_ROOT; };
 		AA7D2431162E15C0001B45BF /* Equations.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Equations.cpp; sourceTree = SOURCE_ROOT; };
@@ -96,6 +97,7 @@
 				AA7D2433162E15C0001B45BF /* main.cpp */,
 				AA7D2434162E15C0001B45BF /* RateState.cpp */,
 				AA7D2435162E15C0001B45BF /* RateState.h */,
+				AA19A5F51631C1CF000AF19E /* Params.h */,
 				AA7D2436162E15C0001B45BF /* Solver.cpp */,
 				AA7D2437162E15C0001B45BF /* Solver.h */,
 				AA7D2438162E15C0001B45BF /* Spline.cpp */,

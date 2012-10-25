@@ -41,6 +41,7 @@ int ViCaRS::advance(void) {
 	bool	next_solver;
 	int		flag;
 	
+    std::cerr << _cur_solver << " " << _cur_time << std::endl;
 	flag = _solvers[_cur_solver]->advance(this, _vars, _cur_time, _cur_time, next_solver);
 	if (next_solver) {
 		// Reinit the next solver
@@ -108,8 +109,8 @@ void ViCaRS::write_cur_data(FILE *fp) {
 	BlockMap::const_iterator	it;
 	unsigned int				vnum;
 	
-	fprintf(fp, "%0.7e ", _cur_time);
-	//fprintf(fp, "%0.7e ", _cur_time/(365.25*86400));
+	//fprintf(fp, "%0.7e ", _cur_time);
+	fprintf(fp, "%0.7e ", _cur_time*_eqns->time_factor(_params));
 	for (it=_bdata.begin();it!=_bdata.end();++it) {
 		for (vnum=0;vnum<_eqns->num_outputs();++vnum) {
 			fprintf(fp, "%14.6e ", _eqns->var_value(this, vnum, it->first, _vars));
@@ -134,6 +135,10 @@ int ViCaRS::fill_greens_matrix(void) {
 				r = abs(i-j);
 				greens_matrix.setVal(i,j,0.098*G/(L*pow(((r/L)-1),3)));
 			}
+            r = abs(i-j);
+            if (r == 0) greens_matrix.setVal(i,j,0);
+            else if (r == 1) greens_matrix.setVal(i,j,0.001);
+            else greens_matrix.setVal(i,j,0.0);
 		}
 	}
 	

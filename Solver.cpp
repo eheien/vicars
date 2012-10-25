@@ -2,7 +2,7 @@
 #include "RateState.h"
 
 int RK4Solver::init_solver(ViCaRS *sim) {
-	BlockMap::const_iterator	it;
+	BlockMap::iterator	it;
 	BlockGID		gid;
     N_Vector        temp_tols;
     
@@ -18,7 +18,7 @@ int RK4Solver::init_solver(ViCaRS *sim) {
 	
 	for (it=sim->begin();it!=sim->end();++it) {
 		gid = it->first;
-		_eqns->init_block(gid, it->second, sim->vars(), temp_tols);
+		_eqns->init_block(sim->params(), gid, it->second, sim->vars(), temp_tols);
 	}
     
     N_VDestroy_Serial(temp_tols);
@@ -95,7 +95,7 @@ CVODESolver::~CVODESolver(void) {
 
 int CVODESolver::init_solver(ViCaRS *sim) {
 	int				flag;
-	BlockMap::const_iterator	it;
+	BlockMap::iterator	it;
 	BlockGID		gid;
 	
 	// Initialize variables and tolerances
@@ -105,7 +105,7 @@ int CVODESolver::init_solver(ViCaRS *sim) {
 	
 	for (it=sim->begin();it!=sim->end();++it) {
 		gid = it->first;
-		_eqns->init_block(gid, it->second, sim->vars(), _abs_tol);
+		_eqns->init_block(sim->params(), gid, it->second, sim->vars(), _abs_tol);
 	}
     
 	// Initialize the solver with a root finder

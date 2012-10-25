@@ -2,6 +2,7 @@
 #include "Spline.h"
 #include "Equations.h"
 #include "Solver.h"
+#include "Params.h"
 
 #include <stdio.h>
 #include <math.h>
@@ -13,22 +14,6 @@
 #define _VICARS_RATESTATE_H_
 
 // Format of result vector: [x0, v0, h0, x1, v1, h1, ..., xn, vn, hn]
-
-class SimParams {
-public:
-    double                  V_star; // 
-	double                  G;		// shear modulus parameter, pascals
-	double                  D_c;    // characteristic slip, meters
-	double                  W;
-	double                  beta;   // shear wave speed, meters/second
-    double                  sigma;  // effective normal stress, pascals
-    double                  A;
-    double                  B;
-    double                  v_ss;   // steady state pulling speed, meters/second
-    double                  mu_0;   // nominal coefficient of friction
-    double                  side;   // side length, meters
-    double                  L;      // rate state elngth normalization
-};
 
 class ViCaRS {
 private:
@@ -50,9 +35,6 @@ private:
 	unsigned int			_cur_solver;
 	
 	SimEquations			*_eqns;
-	
-	// When any block in the system reaches this speed, the system is considered to be in rupture mode
-	realtype                _rupture_threshold;
 	
 	// Whether to use the slowness law (var = true) or slip law (var = false)
 	bool                    _use_slowness_law;
@@ -87,9 +69,9 @@ public:
 	realtype interaction(BlockGID a, BlockGID b);
 	realtype get_time(void) const { return _cur_time; };
 	
-	void set_rupture_threshold(realtype new_threshold) { _rupture_threshold = new_threshold; };
-	realtype rupture_threshold(void) const { return _rupture_threshold; };
-	
+    int cur_solver(void) const { return _cur_solver; };
+    realtype rupture_threshold(void) { return _solvers[_cur_solver]->rupture_threshold(); };
+    
 	bool use_slowness_law(void) const { return _use_slowness_law; };
 	
 	unsigned int num_global_blocks(void) const { return _num_global_blocks; };

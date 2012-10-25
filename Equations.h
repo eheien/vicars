@@ -1,5 +1,6 @@
 #include "BlockData.h"
 #include "Spline.h"
+#include "Params.h"
 
 #include <cvode/cvode.h>             /* prototypes for CVODE fcts., consts. */
 #include <nvector/nvector_serial.h>
@@ -17,8 +18,9 @@ public:
 	virtual int init(ViCaRS *sim) = 0;
 	virtual unsigned int num_equations(void) const = 0;
 	virtual unsigned int num_outputs(void) const = 0;
+    virtual realtype time_factor(SimParams params) const = 0;
 	
-	virtual void init_block(BlockGID gid, const BlockData &block, N_Vector vars, N_Vector tols) = 0;
+	virtual void init_block(SimParams params, BlockGID gid, BlockData &block, N_Vector vars, N_Vector tols) = 0;
 	
 	virtual std::string var_name(unsigned int var_num) const = 0;
 	virtual realtype var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y) = 0;
@@ -46,14 +48,15 @@ public:
 	virtual int init(ViCaRS *sim);
 	virtual unsigned int num_equations(void) const { return 3; };
 	virtual unsigned int num_outputs(void) const { return 4; };
+    virtual realtype time_factor(SimParams params) const { return 1;/*params.L/(params.v_ss*86400);*/ };
 	
-	virtual void init_block(BlockGID gid, const BlockData &block, N_Vector vars, N_Vector tols);
+	virtual void init_block(SimParams params, BlockGID gid, BlockData &block, N_Vector vars, N_Vector tols);
 	
 	virtual std::string var_name(unsigned int var_num) const;
 	virtual realtype var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y);
 	
 	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot);
-	virtual bool has_jacobian(void) { return true; };
+	virtual bool has_jacobian(void) { return false; };
 	virtual int jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp);
 	virtual int check_for_mode_change(ViCaRS *sim, realtype t, N_Vector y, realtype *gout);
 	virtual void handle_mode_change(ViCaRS *sim, realtype t, N_Vector y);
@@ -78,6 +81,41 @@ public:
 	}
 };
 
+class DimensionalRSEqns : public SimEquations {
+public:
+	DimensionalRSEqns(void) {};
+	virtual ~DimensionalRSEqns(void) {};
+	
+	virtual int init(ViCaRS *sim);
+	virtual unsigned int num_equations(void) const { return 3; };
+	virtual unsigned int num_outputs(void) const { return 4; };
+    virtual realtype time_factor(SimParams params) const { return 1; };
+	
+	virtual void init_block(SimParams params, BlockGID gid, BlockData &block, N_Vector vars, N_Vector tols);
+	
+	virtual std::string var_name(unsigned int var_num) const;
+	virtual realtype var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y);
+	
+	virtual int solve_odes(ViCaRS *sim, realtype t, N_Vector y, N_Vector ydot);
+	virtual bool has_jacobian(void) { return false; };
+	virtual int jacobian_times_vector(ViCaRS *sim, N_Vector v, N_Vector Jv, realtype t, N_Vector y, N_Vector fy, N_Vector tmp);
+	virtual int check_for_mode_change(ViCaRS *sim, realtype t, N_Vector y, realtype *gout);
+	virtual void handle_mode_change(ViCaRS *sim, realtype t, N_Vector y);
+	virtual bool values_valid(ViCaRS *sim, N_Vector y);
+    
+	realtype &Xth(N_Vector y, BlockGID bnum) { return NV_Ith_S(y,bnum*3+0); };
+	realtype &Vth(N_Vector y, BlockGID bnum) { return NV_Ith_S(y,bnum*3+1); };
+	realtype &Hth(N_Vector y, BlockGID bnum) { return NV_Ith_S(y,bnum*3+2); };
+	
+	realtype log_func(realtype x) const {
+		return log(x);
+	}
+	
+	realtype log_deriv(realtype x) const {
+		return 1/x;
+	}
+};
+
 class SimpleEqns : public SimEquations {
 private:
 	// Phase of each element
@@ -94,8 +132,9 @@ public:
 	virtual int init(ViCaRS *sim);
 	virtual unsigned int num_equations(void) const { return 2; };
 	virtual unsigned int num_outputs(void) const { return 5; };
+    virtual realtype time_factor(SimParams params) const { return 1; };
 	
-	virtual void init_block(BlockGID gid, const BlockData &block, N_Vector vars, N_Vector tols);
+	virtual void init_block(SimParams params, BlockGID gid, BlockData &block, N_Vector vars, N_Vector tols);
 	
 	virtual std::string var_name(unsigned int var_num) const;
 	virtual realtype var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y);
@@ -119,8 +158,9 @@ public:
 	virtual int init(ViCaRS *sim);
 	virtual unsigned int num_equations(void) const { return 3; };
 	virtual unsigned int num_outputs(void) const { return 3; };
+    virtual realtype time_factor(SimParams params) const { return 1; };
 	
-	virtual void init_block(BlockGID gid, const BlockData &block, N_Vector vars, N_Vector tols);
+	virtual void init_block(SimParams params, BlockGID gid, BlockData &block, N_Vector vars, N_Vector tols);
 	
 	virtual std::string var_name(unsigned int var_num) const;
 	virtual realtype var_value(ViCaRS *sim, unsigned int var_num, BlockGID gid, N_Vector y);

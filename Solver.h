@@ -35,6 +35,9 @@ protected:
 	SimEquations				*_eqns;
     double                      _timestep;
     
+	// Velocity cutoff for rupture mode
+	realtype                _rupture_threshold;
+	
 public:
     Solver(SimEquations *eqns) : _eqns(eqns) {};
     virtual ~Solver(void) {};
@@ -42,6 +45,9 @@ public:
 	virtual int reinit_solver(realtype cur_time, N_Vector vars) = 0;
 	virtual int advance(ViCaRS *sim, N_Vector vars, realtype target_time, realtype &finish_time, bool &next_solver) = 0;
 	virtual void print_stats(void) = 0;
+    
+	void set_rupture_threshold(realtype new_threshold) { _rupture_threshold = new_threshold; };
+	realtype rupture_threshold(void) const { return _rupture_threshold; };
     
     void set_timestep(double new_timestep) { _timestep = new_timestep; };
 };
@@ -73,6 +79,7 @@ public:
         if (flag != CV_SUCCESS) return 1;
         return 0;
     };
+    
     virtual void set_rootdir(int new_rootdir) { _rootdir = new_rootdir; };
 	virtual int init_solver(ViCaRS *sim);
 	virtual int advance(ViCaRS *sim, N_Vector vars, realtype target_time, realtype &finish_time, bool &next_solver);
