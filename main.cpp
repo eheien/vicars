@@ -1,7 +1,7 @@
 
 #include "RateState.h"
 
-#define NBLOCKS			7
+#define NBLOCKS			1
 
 int main(int argc, char **argv)
 {
@@ -13,7 +13,7 @@ int main(int argc, char **argv)
 	realtype		sim_end;
 	
     // Set global simulation parameters
-    sim.params().V_star = 1.0/(1.0e2*1.0e3*365.25*86400);	// 1 centimeter/1000 years in m/s
+    sim.params().V_star = (1.0/1.0e2)/(365.25*86400);	// 1 centimeter/1 year in m/s
     sim.params().G = 3.0e10;            // Pascals
     sim.params().D_c = 0.01*1e-3;       // meters
     sim.params().W = 6000;              // meters
@@ -38,49 +38,19 @@ int main(int argc, char **argv)
 	
 	// Whether to use simple (Dieterich-style) equations or full rate/state equations
 	SimEquations		*eqns;
-	bool				use_simplified = false, use_cvode = true;
 	
-	if (use_simplified) {
-		eqns = new SimpleEqns;
-		sim_end = 50*365.25*86400;
-		if (use_cvode) {
-			CVODESolver *solver_phase0 = new CVODESolver(eqns);
-			CVODESolver *solver_phase1 = new CVODESolver(eqns);
-			CVODESolver *solver_phase2 = new CVODESolver(eqns);
-			solver_phase0->set_timestep(86400);
-			solver_phase1->set_timestep(60);
-			solver_phase2->set_timestep(1);
-			
-			sim.add_solver(solver_phase0);
-			sim.add_solver(solver_phase1);
-			sim.add_solver(solver_phase2);
-		} else {
-			// RK4
-		}
-	} else {
-		eqns = new OrigEqns;
-        realtype time_norm_factor = sim.params().v_ss/sim.params().L;
-        //std::cerr << "Norm factor " << time_norm_factor << std::endl;
-		sim_end = 1000;      // 1000 normalized days
-		if (use_cvode) {
-			CVODESolver *solver_long = new CVODESolver(eqns);
-			CVODESolver *solver_rupture = new CVODESolver(eqns);
-            realtype long_timestep = 0.05;    // 1 day normalized long timesteps
-            realtype rupture_timestep = 0.01;     // 1 second normalized rupture timesteps
-            //std::cerr << "End: " << sim_end << " Long DT: " << long_timestep << " Short DT: " << rupture_timestep << std::endl;
-			solver_long->set_timestep(long_timestep);
-			solver_rupture->set_timestep(rupture_timestep);
-            solver_long->set_rupture_threshold(0.01);
-            solver_rupture->set_rupture_threshold(0.001);
-            solver_long->set_rootdir(1);
-            solver_rupture->set_rootdir(-1);
-			
-			sim.add_solver(solver_long);
-			//sim.add_solver(solver_rupture);
-		} else {
-			// RK4
-		}
-	}
+    eqns = new SimpleEqns;
+    sim_end = 25*365.25*86400;
+    CVODESolver *solver_phase0 = new CVODESolver(eqns);
+    CVODESolver *solver_phase1 = new CVODESolver(eqns);
+    CVODESolver *solver_phase2 = new CVODESolver(eqns);
+    solver_phase0->set_timestep(86400);
+    solver_phase1->set_timestep(60);
+    solver_phase2->set_timestep(0.1);
+    
+    sim.add_solver(solver_phase0);
+    sim.add_solver(solver_phase1);
+    sim.add_solver(solver_phase2);
 	
 	res = sim.init(eqns);
 	if (res) {

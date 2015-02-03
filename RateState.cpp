@@ -1,6 +1,6 @@
 #include "RateState.h"
 
-ViCaRS::ViCaRS(unsigned int total_num_blocks) : greens_matrix(total_num_blocks, total_num_blocks), _num_global_blocks(total_num_blocks)
+ViCaRS::ViCaRS(unsigned int total_num_blocks) : _num_global_blocks(total_num_blocks)
 {
     _use_slowness_law = true;
 }
@@ -18,8 +18,8 @@ int ViCaRS::init(SimEquations *eqns) {
 	_eqns = eqns;
 	_num_equations = eqns->num_equations();
 	
-	flag = fill_greens_matrix();
-	if (flag) return flag;
+	//flag = fill_greens_matrix();
+	//if (flag) return flag;
 	
 	num_local = (unsigned int)_bdata.size();
 	_vars = N_VNew_Serial(_num_global_blocks*_num_equations);
@@ -62,7 +62,7 @@ void ViCaRS::cleanup(void) {
 	for (i=0;i<_solvers.size();++i) delete _solvers[i];
 }
 
-realtype ViCaRS::interaction(BlockGID i, BlockGID j) { return greens_matrix.val(i,j); };
+realtype ViCaRS::interaction(BlockGID i, BlockGID j) { return 1;/*greens_matrix.val(i,j);*/ };
 
 void ViCaRS::write_header(FILE *fp) {
 	BlockMap::const_iterator	it;
@@ -102,14 +102,14 @@ void ViCaRS::write_summary(FILE *fp) {
 			max_v_gid = it->first;
 		}
 	}
-	fprintf(fp, "%0.2e\t\t%0.2e(%d)\t%0.2e(%d)\n", _cur_time, min_v, min_v_gid, max_v, max_v_gid);
+	fprintf(fp, "%0.2e\t\t%0.2e(%d)\t%0.2e(%d)\n", _cur_time*_eqns->time_factor(_params), min_v, min_v_gid, max_v, max_v_gid);
 }
 
 void ViCaRS::write_cur_data(FILE *fp) {
 	BlockMap::const_iterator	it;
 	unsigned int				vnum;
 	
-	//fprintf(fp, "%0.7e ", _cur_time);
+    std::cerr << "Output data" << std::endl;
 	fprintf(fp, "%0.7e ", _cur_time*_eqns->time_factor(_params));
 	for (it=_bdata.begin();it!=_bdata.end();++it) {
 		for (vnum=0;vnum<_eqns->num_outputs();++vnum) {
@@ -119,7 +119,7 @@ void ViCaRS::write_cur_data(FILE *fp) {
 	fprintf(fp, "\n");
 }
 
-int ViCaRS::fill_greens_matrix(void) {
+/*int ViCaRS::fill_greens_matrix(void) {
 	int i, j, r;
 	BlockMap::const_iterator	it, jt;
 	
@@ -143,5 +143,5 @@ int ViCaRS::fill_greens_matrix(void) {
 	}
 	
 	return 0;
-}
+}*/
 

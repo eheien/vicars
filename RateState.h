@@ -1,4 +1,4 @@
-#include "QuakeLib.h"
+//#include "QuakeLib.h"
 #include "Spline.h"
 #include "Equations.h"
 #include "Solver.h"
@@ -39,7 +39,7 @@ private:
 	// Whether to use the slowness law (var = true) or slip law (var = false)
 	bool                    _use_slowness_law;
 	
-	quakelib::DenseStdStraight<double> greens_matrix;
+	//quakelib::DenseStdStraight<double> greens_matrix;
 	int fill_greens_matrix(void);
 	
 public:
